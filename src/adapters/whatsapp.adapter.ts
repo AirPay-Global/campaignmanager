@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { logger } from '../lib/logger';
 
-const WHATSAPP_API_VERSION = 'v18.0';
+const WHATSAPP_API_VERSION = 'v25.0';
 const BASE_URL = `https://graph.facebook.com/${WHATSAPP_API_VERSION}`;
 
 export interface WhatsAppTemplateComponent {
@@ -67,7 +67,7 @@ export async function sendWhatsAppTemplate(
     template: {
       name: options.templateName,
       language: {
-        code: options.languageCode ?? 'en',
+        code: options.languageCode ?? 'en_US',
       },
       ...(options.components?.length ? { components: options.components } : {}),
     },
