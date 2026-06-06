@@ -11,6 +11,7 @@ import { processQueue } from './engines/queue.engine';
 // Routes
 import authRoutes from './routes/auth.routes';
 import setupRoutes from './routes/setup.routes';
+import migrateRoutes from './routes/migrate.routes';
 import campaignRoutes from './routes/campaigns.routes';
 import mandateRoutes from './routes/mandates.routes';
 import contactRoutes from './routes/contacts.routes';
@@ -56,6 +57,7 @@ app.use('/webhooks', webhookRoutes);
 app.use('/api/v1', apiRateLimiter);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/setup', setupRoutes);
+app.use('/api/v1/migrate', migrateRoutes);
 app.use('/api/v1/campaigns', campaignRoutes);
 app.use('/api/v1/mandates', mandateRoutes);
 app.use('/api/v1/contacts', contactRoutes);
