@@ -1,17 +1,22 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import { logger } from '../lib/logger';
 
-let resendClient: Resend | null = null;
+function createTransport() {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT ?? '587'),
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+}
 
-function getResendClient(): Resend {
-  if (!resendClient) {
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) {
-      throw new Error('RESEND_API_KEY is not configured');
-    }
-    resendClient = new Resend(apiKey);
-  }
-  return resendClient;
+function getFromAddress(fromOverride?: string, fromNameOverride?: string): string {
+  const email = fromOverride ?? process.env.EMAIL_FROM_ADDRESS ?? 'campaigns@airpay.com.na';
+  const name = fromNameOverride ?? process.env.EMAIL_FROM_NAME ?? 'AirPay';
+  return `${name} <${email}>`;
 }
 
 export interface EmailOptions {
@@ -22,7 +27,6 @@ export interface EmailOptions {
   from?: string;
   fromName?: string;
   replyTo?: string;
-  tags?: Array<{ name: string; value: string }>;
 }
 
 export interface EmailResult {
@@ -50,38 +54,21 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
   return chunks;
 }
 
-function getFromAddress(fromOverride?: string, fromNameOverride?: string): string {
-  const email = fromOverride ?? process.env.RESEND_FROM_EMAIL ?? 'campaigns@airpay.com.na';
-  const name = fromNameOverride ?? process.env.RESEND_FROM_NAME ?? 'AirPay';
-  return `${name} <${email}>`;
-}
-
 export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
-  const client = getResendClient();
+  const transporter = createTransport();
 
   try {
-    const response = await client.emails.send({
+    const info = await transporter.sendMail({
       from: getFromAddress(options.from, options.fromName),
       to: options.to,
       subject: options.subject,
       html: options.html,
       text: options.text,
-      reply_to: options.replyTo,
-      tags: options.tags,
+      replyTo: options.replyTo,
     });
 
-    if (response.error) {
-      logger.error('Email send error', { to: options.to, error: response.error });
-      return { email: options.to, status: 'failed', error: response.error.message };
-    }
-
-    logger.info('Email sent', { to: options.to, messageId: response.data?.id });
-
-    return {
-      email: options.to,
-      status: 'sent',
-      messageId: response.data?.id,
-    };
+    logger.info('Email sent', { to: options.to, messageId: info.messageId });
+    return { email: options.to, status: 'sent', messageId: info.messageId };
   } catch (err: unknown) {
     const error = err as Error;
     logger.error('Failed to send email', { to: options.to, error: error.message });
@@ -101,16 +88,12 @@ export async function sendBulkEmail(
   for (const chunk of chunks) {
     const promises = chunk.map(async (recipient) => {
       const vars = recipient.variables ?? {};
-      const subject = interpolate(baseOptions.subject, vars);
-      const html = baseOptions.html ? interpolate(baseOptions.html, vars) : undefined;
-      const text = baseOptions.text ? interpolate(baseOptions.text, vars) : undefined;
-
       return sendEmail({
         ...baseOptions,
         to: recipient.email,
-        subject,
-        html,
-        text,
+        subject: interpolate(baseOptions.subject ?? '', vars),
+        html: baseOptions.html ? interpolate(baseOptions.html, vars) : undefined,
+        text: baseOptions.text ? interpolate(baseOptions.text, vars) : undefined,
       });
     });
 
@@ -123,7 +106,6 @@ export async function sendBulkEmail(
       }
     }
 
-    // Delay between batches
     if (chunks.indexOf(chunk) < chunks.length - 1) {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
@@ -133,6 +115,5 @@ export async function sendBulkEmail(
   const failureCount = allResults.filter((r) => r.status === 'failed').length;
 
   logger.info('Bulk email complete', { total: allResults.length, successCount, failureCount });
-
   return { successCount, failureCount, results: allResults };
 }
