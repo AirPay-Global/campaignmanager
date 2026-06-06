@@ -4,7 +4,7 @@
   "description": "AirPay Multi-Channel Campaign Management Platform",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cd client && npm run build",
     "start:dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "start:prod": "node dist/index.js",
     "worker": "node dist/worker.js",

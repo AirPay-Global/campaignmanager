@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import cron from 'node-cron';
+import path from 'path';
 import { logger } from './lib/logger';
 import { apiRateLimiter } from './middleware/rate-limit.middleware';
 import { processQueue } from './engines/queue.engine';
@@ -52,9 +53,17 @@ app.use('/api/v1/mandates', mandateRoutes);
 app.use('/api/v1/contacts', contactRoutes);
 app.use('/api/v1/messages', messageRoutes);
 
-// ─── 404 Handler ────────────────────────────────────────────────────────────
-app.use((_req: Request, res: Response) => {
-  res.status(404).json({ error: 'Not Found', message: 'Endpoint not found' });
+// ─── Serve React Client ──────────────────────────────────────────────────────
+const clientDist = path.join(__dirname, '../client/dist');
+app.use(express.static(clientDist));
+
+// SPA catch-all — must come AFTER all /api and /webhooks routes
+app.get('*', (req: Request, res: Response) => {
+  // Don't intercept API or webhook paths that weren't matched above
+  if (req.path.startsWith('/api/') || req.path.startsWith('/webhooks')) {
+    return res.status(404).json({ error: 'Not Found', message: 'Endpoint not found' });
+  }
+  res.sendFile(path.join(clientDist, 'index.html'));
 });
 
 // ─── Global Error Handler ────────────────────────────────────────────────────

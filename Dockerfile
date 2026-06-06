@@ -10,6 +10,11 @@ COPY tsconfig.json ./
 COPY src/ ./src/
 RUN npm run build
 
+COPY client/package*.json ./client/
+RUN cd client && npm ci
+COPY client/ ./client/
+RUN cd client && npm run build
+
 # Stage 2: Production
 FROM node:22-alpine AS production
 
@@ -19,6 +24,7 @@ COPY package*.json ./
 RUN npm ci --only=production
 
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/client/dist ./client/dist
 
 ENV NODE_ENV=production
 
