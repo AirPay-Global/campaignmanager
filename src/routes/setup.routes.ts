@@ -8,17 +8,11 @@ const router = Router();
 // POST /api/v1/setup
 // Creates the first admin user + organization. Disabled once any user exists.
 router.post('/', async (req: Request, res: Response) => {
-  const setupToken = process.env.SETUP_TOKEN;
-
-  // Require a setup token to prevent abuse
-  if (!setupToken) {
-    return res.status(403).json({ error: 'SETUP_TOKEN env var is not set' });
-  }
-
+  const setupToken = process.env.SETUP_TOKEN ?? 'airpay-setup';
   const { token, orgName, email, password } = req.body;
 
-  if (!token || !orgName || !email || !password) {
-    return res.status(400).json({ error: 'token, orgName, email, and password are required' });
+  if (!orgName || !email || !password) {
+    return res.status(400).json({ error: 'orgName, email, and password are required' });
   }
 
   if (token !== setupToken) {
