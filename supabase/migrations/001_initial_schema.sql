@@ -21,6 +21,7 @@ CREATE TABLE organizations (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name          TEXT NOT NULL,
   slug          TEXT UNIQUE NOT NULL,
+  timezone      TEXT NOT NULL DEFAULT 'UTC',
   settings      JSONB NOT NULL DEFAULT '{}',
   created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()

@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS organizations (
   id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name       TEXT NOT NULL,
   slug       TEXT UNIQUE NOT NULL,
+  timezone   TEXT NOT NULL DEFAULT 'UTC',
   settings   JSONB NOT NULL DEFAULT '{}',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -276,10 +277,15 @@ CREATE INDEX IF NOT EXISTS idx_delivery_logs_outbound_message_id ON delivery_log
 CREATE INDEX IF NOT EXISTS idx_audit_logs_org_id ON audit_logs(org_id);
 `;
 
+const SQL_004 = `
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'UTC';
+`;
+
 const MIGRATIONS = [
   { name: '001_initial_schema', sql: SQL_001 },
   { name: '002_rls_policies',   sql: SQL_002 },
   { name: '003_indexes',        sql: SQL_003 },
+  { name: '004_org_timezone',   sql: SQL_004 },
 ];
 
 export async function runMigrations(): Promise<void> {
