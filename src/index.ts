@@ -4,6 +4,7 @@ import cors from 'cors';
 import cron from 'node-cron';
 import path from 'path';
 import { logger } from './lib/logger';
+import { runMigrations } from './lib/migrate';
 import { apiRateLimiter } from './middleware/rate-limit.middleware';
 import { processQueue } from './engines/queue.engine';
 
@@ -104,11 +105,16 @@ if (process.env.RUN_QUEUE_WORKER !== 'false') {
 // ─── Start Server ────────────────────────────────────────────────────────────
 const PORT = Number(process.env.PORT ?? '3000');
 
-app.listen(PORT, () => {
-  logger.info(`AirPay Campaign Manager listening on port ${PORT}`, {
-    env: process.env.NODE_ENV ?? 'development',
-    port: PORT,
+// Run migrations then start server
+runMigrations()
+  .catch(err => logger.error('Startup migration error', { error: err.message }))
+  .finally(() => {
+    app.listen(PORT, () => {
+      logger.info(`AirPay Campaign Manager listening on port ${PORT}`, {
+        env: process.env.NODE_ENV ?? 'development',
+        port: PORT,
+      });
+    });
   });
-});
 
 export default app;
