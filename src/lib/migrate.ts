@@ -291,8 +291,7 @@ const MIGRATIONS = [
 export async function runMigrations(): Promise<void> {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) {
-    logger.warn('DATABASE_URL not set — skipping auto-migration');
-    return;
+    throw new Error('DATABASE_URL environment variable is not set — cannot run migrations');
   }
 
   const pool = new Pool({ connectionString: dbUrl, ssl: { rejectUnauthorized: false } });
