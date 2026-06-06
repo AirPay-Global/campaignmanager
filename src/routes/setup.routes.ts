@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { runMigrations } from '../lib/migrate';
 import { logger } from '../lib/logger';
 
 const router = Router();
@@ -24,6 +25,15 @@ router.post('/', async (req: Request, res: Response) => {
   }
 
   try {
+    // Ensure database tables exist (runs migrations if not already applied)
+    try {
+      await runMigrations();
+    } catch (migErr: unknown) {
+      const e = migErr as Error;
+      logger.error('Setup: migration failed', { error: e.message });
+      return res.status(500).json({ error: 'Database setup failed', detail: e.message });
+    }
+
     // Check if any users already exist — setup runs only once
     const { data: existingUsers } = await supabase.auth.admin.listUsers();
     if (existingUsers && existingUsers.users.length > 0) {
