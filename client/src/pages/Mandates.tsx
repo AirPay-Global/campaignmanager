@@ -1,108 +1,60 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Loader2, X, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, Loader2, X, Shield } from 'lucide-react';
 import api from '../lib/api';
 import { ToastContainer, useToast } from '../components/Toast';
 
-interface Mandate {
-  id: string;
-  name: string;
-  channels: string[];
-  trigger_type: string;
-  action: string;
-  priority: number;
-  enabled: boolean;
-  created_at: string;
-}
-
-interface MandatesResponse {
-  data: Mandate[];
-  total?: number;
-}
+interface Mandate { id: string; name: string; channels: string[]; trigger_type: string; action: string; priority: number; enabled: boolean; created_at: string; }
+interface MandatesResponse { data: Mandate[]; total?: number; }
+interface FormState { name: string; channels: string[]; trigger_type: string; trigger_keywords: string; trigger_pattern: string; action: string; response_whatsapp_body: string; response_sms: string; escalate_to: string; priority: number; }
 
 const CHANNELS = ['whatsapp', 'sms', 'email'];
 const TRIGGER_TYPES = [
-  { value: 'keyword', label: 'Keyword' },
-  { value: 'regex', label: 'Regex' },
-  { value: 'contains', label: 'Contains' },
-  { value: 'always', label: 'Always' },
-  { value: 'no_match', label: 'No Match' },
+  { value:'keyword', label:'Keyword' },
+  { value:'regex', label:'Regex' },
+  { value:'contains', label:'Contains' },
+  { value:'always', label:'Always' },
+  { value:'no_match', label:'No Match' },
 ];
 const ACTIONS = [
-  { value: 'auto_respond', label: 'Auto Respond' },
-  { value: 'escalate', label: 'Escalate' },
-  { value: 'queue_for_review', label: 'Queue for Review' },
-  { value: 'webhook_call', label: 'Webhook Call' },
-  { value: 'tag_contact', label: 'Tag Contact' },
+  { value:'auto_respond', label:'Auto Respond' },
+  { value:'escalate', label:'Escalate' },
+  { value:'queue_for_review', label:'Queue for Review' },
+  { value:'webhook_call', label:'Webhook Call' },
+  { value:'tag_contact', label:'Tag Contact' },
 ];
+const defaultForm: FormState = { name:'', channels:[], trigger_type:'keyword', trigger_keywords:'', trigger_pattern:'', action:'auto_respond', response_whatsapp_body:'', response_sms:'', escalate_to:'', priority:0 };
 
-interface FormState {
-  name: string;
-  channels: string[];
-  trigger_type: string;
-  trigger_keywords: string;
-  trigger_pattern: string;
-  action: string;
-  response_whatsapp_body: string;
-  response_sms: string;
-  escalate_to: string;
-  priority: number;
+function Label({ children }: { children: React.ReactNode }) {
+  return <label style={{ display:'block', fontSize:11, color:'#666', marginBottom:6, letterSpacing:'0.07em', textTransform:'uppercase' as const, fontWeight:600 }}>{children}</label>;
 }
-
-const defaultForm: FormState = {
-  name: '',
-  channels: [],
-  trigger_type: 'keyword',
-  trigger_keywords: '',
-  trigger_pattern: '',
-  action: 'auto_respond',
-  response_whatsapp_body: '',
-  response_sms: '',
-  escalate_to: '',
-  priority: 0,
-};
 
 export default function Mandates() {
   const qc = useQueryClient();
   const { toasts, addToast, dismissToast } = useToast();
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<FormState>(defaultForm);
-  const [formErrors, setFormErrors] = useState<Partial<Record<keyof FormState, string>>>({});
+  const [formErrors, setFormErrors] = useState<Partial<Record<keyof FormState,string>>>({});
 
   const { data, isLoading } = useQuery<MandatesResponse>({
     queryKey: ['mandates'],
-    queryFn: () => api.get('/mandates').then((r) => r.data),
+    queryFn: () => api.get('/mandates').then(r => r.data),
   });
-
   const mandates: Mandate[] = data?.data ?? [];
 
   const createMutation = useMutation({
-    mutationFn: (payload: Record<string, unknown>) => api.post('/mandates', payload),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['mandates'] });
-      addToast('success', 'Mandate created successfully.');
-      setShowModal(false);
-      setForm(defaultForm);
-    },
-    onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        'Failed to create mandate.';
-      addToast('error', msg);
-    },
+    mutationFn: (p: Record<string,unknown>) => api.post('/mandates', p),
+    onSuccess: () => { qc.invalidateQueries({ queryKey:['mandates'] }); addToast('success','Mandate created.'); setShowModal(false); setForm(defaultForm); },
+    onError: (err: unknown) => addToast('error', (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to create mandate.'),
   });
-
   const toggleMutation = useMutation({
-    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      api.put(`/mandates/${id}`, { enabled }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['mandates'] });
-    },
-    onError: () => addToast('error', 'Failed to update mandate.'),
+    mutationFn: ({ id, enabled }: { id:string; enabled:boolean }) => api.put(`/mandates/${id}`, { enabled }),
+    onSuccess: () => qc.invalidateQueries({ queryKey:['mandates'] }),
+    onError: () => addToast('error','Failed to update mandate.'),
   });
 
   const validate = () => {
-    const errors: Partial<Record<keyof FormState, string>> = {};
+    const errors: Partial<Record<keyof FormState,string>> = {};
     if (!form.name.trim()) errors.name = 'Name is required.';
     if (form.channels.length === 0) errors.channels = 'Select at least one channel.';
     setFormErrors(errors);
@@ -112,301 +64,159 @@ export default function Mandates() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-
-    const payload: Record<string, unknown> = {
-      name: form.name,
-      channels: form.channels,
-      trigger_type: form.trigger_type,
-      action: form.action,
-      priority: form.priority,
-    };
-
-    if (form.trigger_type === 'keyword' && form.trigger_keywords) {
-      payload.trigger_keywords = form.trigger_keywords
-        .split(',')
-        .map((k) => k.trim())
-        .filter(Boolean);
-    }
-    if (['regex', 'contains'].includes(form.trigger_type) && form.trigger_pattern) {
-      payload.trigger_pattern = form.trigger_pattern;
-    }
+    const payload: Record<string,unknown> = { name:form.name, channels:form.channels, trigger_type:form.trigger_type, action:form.action, priority:form.priority };
+    if (form.trigger_type === 'keyword' && form.trigger_keywords) payload.trigger_keywords = form.trigger_keywords.split(',').map(k=>k.trim()).filter(Boolean);
+    if (['regex','contains'].includes(form.trigger_type) && form.trigger_pattern) payload.trigger_pattern = form.trigger_pattern;
     if (form.action === 'auto_respond') {
       if (form.response_whatsapp_body) payload.response_whatsapp_body = form.response_whatsapp_body;
       if (form.response_sms) payload.response_sms = form.response_sms;
     }
-    if (form.action === 'escalate' && form.escalate_to) {
-      payload.escalate_to = form.escalate_to;
-    }
-
+    if (form.action === 'escalate' && form.escalate_to) payload.escalate_to = form.escalate_to;
     createMutation.mutate(payload);
   };
 
-  const toggleChannel = (ch: string) => {
-    setForm((prev) => ({
-      ...prev,
-      channels: prev.channels.includes(ch)
-        ? prev.channels.filter((c) => c !== ch)
-        : [...prev.channels, ch],
-    }));
-  };
-
-  const showKeywords = form.trigger_type === 'keyword';
-  const showPattern = ['regex', 'contains'].includes(form.trigger_type);
-  const showAutoRespondFields = form.action === 'auto_respond';
-  const showEscalateTo = form.action === 'escalate';
+  const toggleChannel = (ch: string) => setForm(p => ({ ...p, channels: p.channels.includes(ch) ? p.channels.filter(c=>c!==ch) : [...p.channels, ch] }));
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div style={{ padding:'32px', minHeight:'100vh', background:'#0a0a0a' }}>
+      <div className="animate-fade-in-up" style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:28 }}>
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Mandates</h1>
-          <p className="text-slate-500 text-sm mt-1">Configure automated response rules</p>
+          <h1 style={{ fontSize:28, fontWeight:800, color:'#fff', letterSpacing:'-0.03em', margin:0 }}>Mandates</h1>
+          <p style={{ fontSize:13, color:'#555', marginTop:4 }}>Configure automated response rules</p>
         </div>
-        <button
-          onClick={() => { setShowModal(true); setForm(defaultForm); setFormErrors({}); }}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          New Mandate
+        <button className="btn-orange" onClick={() => { setShowModal(true); setForm(defaultForm); setFormErrors({}); }}
+          style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 18px', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer' }}>
+          <Plus size={15} /> New Mandate
         </button>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-        <div className="overflow-x-auto">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+      <div className="card animate-fade-in-up stagger-2" style={{ overflow:'hidden' }}>
+        {isLoading ? (
+          <div style={{ padding:40, display:'flex', flexDirection:'column', gap:14 }}>
+            {[1,2,3].map(i => <div key={i} className="skeleton" style={{ height:18, borderRadius:4, width:`${50+i*12}%` }} />)}
+          </div>
+        ) : mandates.length === 0 ? (
+          <div style={{ padding:'56px 24px', textAlign:'center' }}>
+            <div style={{ width:56, height:56, borderRadius:12, background:'rgba(139,92,246,0.08)', border:'1px solid rgba(139,92,246,0.15)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px' }}>
+              <Shield size={24} color="#8b5cf6" />
             </div>
-          ) : mandates.length === 0 ? (
-            <div className="text-center py-16">
-              <p className="text-slate-500 text-sm">No mandates yet. Create your first rule.</p>
-            </div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide border-b border-slate-200">
-                  <th className="text-left px-6 py-3 font-medium">Name</th>
-                  <th className="text-left px-6 py-3 font-medium">Channels</th>
-                  <th className="text-left px-6 py-3 font-medium">Trigger</th>
-                  <th className="text-left px-6 py-3 font-medium">Action</th>
-                  <th className="text-left px-6 py-3 font-medium">Priority</th>
-                  <th className="text-left px-6 py-3 font-medium">Enabled</th>
+            <p style={{ color:'#555', fontSize:14, margin:0 }}>No mandates yet. Create your first rule.</p>
+          </div>
+        ) : (
+          <table className="dark-table">
+            <thead><tr>
+              <th>Name</th><th>Channels</th><th>Trigger</th><th>Action</th><th>Priority</th><th>Status</th>
+            </tr></thead>
+            <tbody>
+              {mandates.map(m => (
+                <tr key={m.id}>
+                  <td style={{ color:'#e5e5e5', fontWeight:500 }}>{m.name}</td>
+                  <td>
+                    <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+                      {(m.channels??[]).map(ch => (
+                        <span key={ch} style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background:'rgba(255,102,0,0.08)', color:'#ff8833', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>{ch}</span>
+                      ))}
+                    </div>
+                  </td>
+                  <td style={{ color:'#666', fontSize:12, textTransform:'capitalize' }}>{m.trigger_type?.replace(/_/g,' ')}</td>
+                  <td style={{ color:'#666', fontSize:12, textTransform:'capitalize' }}>{m.action?.replace(/_/g,' ')}</td>
+                  <td style={{ color:'#555' }}>{m.priority}</td>
+                  <td>
+                    <button onClick={() => toggleMutation.mutate({ id:m.id, enabled:!m.enabled })} style={{
+                      padding:'3px 12px', borderRadius:20, border:'none', cursor:'pointer', fontSize:12, fontWeight:600,
+                      background: m.enabled ? 'rgba(34,197,94,0.1)' : 'rgba(68,68,68,0.3)',
+                      color: m.enabled ? '#4ade80' : '#666',
+                      transition:'all 0.15s',
+                    }}>
+                      {m.enabled ? 'Enabled' : 'Disabled'}
+                    </button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {mandates.map((m) => (
-                  <tr key={m.id} className="hover:bg-slate-50">
-                    <td className="px-6 py-3 font-medium text-slate-700">{m.name}</td>
-                    <td className="px-6 py-3">
-                      <div className="flex gap-1 flex-wrap">
-                        {(m.channels ?? []).map((ch) => (
-                          <span key={ch} className="inline-flex px-2 py-0.5 rounded text-xs bg-indigo-50 text-indigo-700 font-medium capitalize">
-                            {ch}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-3 text-slate-500 capitalize">{m.trigger_type?.replace(/_/g, ' ')}</td>
-                    <td className="px-6 py-3 text-slate-500 capitalize">{m.action?.replace(/_/g, ' ')}</td>
-                    <td className="px-6 py-3 text-slate-500">{m.priority}</td>
-                    <td className="px-6 py-3">
-                      <button
-                        onClick={() => toggleMutation.mutate({ id: m.id, enabled: !m.enabled })}
-                        className={`flex items-center gap-1 text-xs font-medium transition-colors ${
-                          m.enabled ? 'text-green-600 hover:text-green-700' : 'text-slate-400 hover:text-slate-600'
-                        }`}
-                        title={m.enabled ? 'Click to disable' : 'Click to enable'}
-                      >
-                        {m.enabled ? (
-                          <ToggleRight className="w-5 h-5" />
-                        ) : (
-                          <ToggleLeft className="w-5 h-5" />
-                        )}
-                        {m.enabled ? 'Enabled' : 'Disabled'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
-      {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-              <h2 className="text-base font-semibold text-slate-800">New Mandate</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
+        <div className="modal-overlay">
+          <div className="animate-slide-up" style={{ background:'#111', border:'1px solid #2a2a2a', borderRadius:16, width:'100%', maxWidth:500, maxHeight:'90vh', overflowY:'auto', overflow:'hidden' }}>
+            <div className="orange-line" />
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'20px 24px', borderBottom:'1px solid #1e1e1e' }}>
+              <span style={{ fontSize:15, fontWeight:700, color:'#fff' }}>New Mandate</span>
+              <button onClick={() => setShowModal(false)} style={{ background:'none', border:'none', color:'#555', cursor:'pointer' }}><X size={18} /></button>
             </div>
-            <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-              {/* Name */}
+            <form onSubmit={handleSubmit} style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:14 }}>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="Mandate name"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                {formErrors.name && <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>}
+                <Label>Name *</Label>
+                <input type="text" value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="Mandate name" className="input-dark" />
+                {formErrors.name && <p style={{ color:'#f87171', fontSize:12, marginTop:4 }}>{formErrors.name}</p>}
               </div>
-
-              {/* Channels */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Channels <span className="text-red-500">*</span>
-                </label>
-                <div className="flex gap-4">
-                  {CHANNELS.map((ch) => (
-                    <label key={ch} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={form.channels.includes(ch)}
-                        onChange={() => toggleChannel(ch)}
-                        className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
-                      />
-                      <span className="text-sm text-slate-700 capitalize">{ch}</span>
-                    </label>
+                <Label>Channels *</Label>
+                <div style={{ display:'flex', gap:8 }}>
+                  {CHANNELS.map(ch => (
+                    <button key={ch} type="button" onClick={() => toggleChannel(ch)} style={{
+                      padding:'6px 14px', borderRadius:6, fontSize:12, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em', cursor:'pointer',
+                      border: form.channels.includes(ch) ? '1px solid #ff6600' : '1px solid #2a2a2a',
+                      background: form.channels.includes(ch) ? 'rgba(255,102,0,0.12)' : 'transparent',
+                      color: form.channels.includes(ch) ? '#ff8833' : '#555',
+                      transition:'all 0.15s',
+                    }}>{ch}</button>
                   ))}
                 </div>
-                {formErrors.channels && <p className="text-red-500 text-xs mt-1">{formErrors.channels}</p>}
+                {formErrors.channels && <p style={{ color:'#f87171', fontSize:12, marginTop:4 }}>{formErrors.channels}</p>}
               </div>
-
-              {/* Trigger Type */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Trigger Type</label>
-                <select
-                  value={form.trigger_type}
-                  onChange={(e) => setForm((p) => ({ ...p, trigger_type: e.target.value }))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                >
-                  {TRIGGER_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
-                  ))}
+                <Label>Trigger Type</Label>
+                <select value={form.trigger_type} onChange={e=>setForm(p=>({...p,trigger_type:e.target.value}))} className="select-dark">
+                  {TRIGGER_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
-
-              {/* Keywords (keyword only) */}
-              {showKeywords && (
+              {form.trigger_type === 'keyword' && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Trigger Keywords (comma-separated)
-                  </label>
-                  <input
-                    type="text"
-                    value={form.trigger_keywords}
-                    onChange={(e) => setForm((p) => ({ ...p, trigger_keywords: e.target.value }))}
-                    placeholder="help, support, info"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
+                  <Label>Trigger Keywords (comma-separated)</Label>
+                  <input type="text" value={form.trigger_keywords} onChange={e=>setForm(p=>({...p,trigger_keywords:e.target.value}))} placeholder="help, support, info" className="input-dark" />
                 </div>
               )}
-
-              {/* Pattern (regex / contains) */}
-              {showPattern && (
+              {['regex','contains'].includes(form.trigger_type) && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Trigger Pattern
-                  </label>
-                  <input
-                    type="text"
-                    value={form.trigger_pattern}
-                    onChange={(e) => setForm((p) => ({ ...p, trigger_pattern: e.target.value }))}
-                    placeholder={form.trigger_type === 'regex' ? '^(help|support)$' : 'billing issue'}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
+                  <Label>Trigger Pattern</Label>
+                  <input type="text" value={form.trigger_pattern} onChange={e=>setForm(p=>({...p,trigger_pattern:e.target.value}))} placeholder={form.trigger_type==='regex' ? '^(help|support)$' : 'billing issue'} className="input-dark" />
                 </div>
               )}
-
-              {/* Action */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Action</label>
-                <select
-                  value={form.action}
-                  onChange={(e) => setForm((p) => ({ ...p, action: e.target.value }))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                >
-                  {ACTIONS.map((a) => (
-                    <option key={a.value} value={a.value}>{a.label}</option>
-                  ))}
+                <Label>Action</Label>
+                <select value={form.action} onChange={e=>setForm(p=>({...p,action:e.target.value}))} className="select-dark">
+                  {ACTIONS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
                 </select>
               </div>
-
-              {/* Auto-respond fields */}
-              {showAutoRespondFields && (
+              {form.action === 'auto_respond' && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">WhatsApp Response</label>
-                    <textarea
-                      value={form.response_whatsapp_body}
-                      onChange={(e) => setForm((p) => ({ ...p, response_whatsapp_body: e.target.value }))}
-                      rows={3}
-                      placeholder="WhatsApp response message…"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                    />
+                    <Label>WhatsApp Response</Label>
+                    <textarea value={form.response_whatsapp_body} onChange={e=>setForm(p=>({...p,response_whatsapp_body:e.target.value}))} rows={2} placeholder="WhatsApp response message…" className="input-dark" style={{ resize:'none' }} />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">SMS Response</label>
-                    <textarea
-                      value={form.response_sms}
-                      onChange={(e) => setForm((p) => ({ ...p, response_sms: e.target.value }))}
-                      rows={2}
-                      placeholder="SMS response message…"
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                    />
+                    <Label>SMS Response</Label>
+                    <textarea value={form.response_sms} onChange={e=>setForm(p=>({...p,response_sms:e.target.value}))} rows={2} placeholder="SMS response message…" className="input-dark" style={{ resize:'none' }} />
                   </div>
                 </>
               )}
-
-              {/* Escalate to */}
-              {showEscalateTo && (
+              {form.action === 'escalate' && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Escalate To (email)</label>
-                  <input
-                    type="email"
-                    value={form.escalate_to}
-                    onChange={(e) => setForm((p) => ({ ...p, escalate_to: e.target.value }))}
-                    placeholder="agent@company.com"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
+                  <Label>Escalate To (email)</Label>
+                  <input type="email" value={form.escalate_to} onChange={e=>setForm(p=>({...p,escalate_to:e.target.value}))} placeholder="agent@company.com" className="input-dark" />
                 </div>
               )}
-
-              {/* Priority */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Priority</label>
-                <input
-                  type="number"
-                  value={form.priority}
-                  onChange={(e) => setForm((p) => ({ ...p, priority: Number(e.target.value) }))}
-                  min={0}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                <Label>Priority</Label>
+                <input type="number" value={form.priority} onChange={e=>setForm(p=>({...p,priority:Number(e.target.value)}))} min={0} className="input-dark" />
               </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={createMutation.isPending}
-                  className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors disabled:opacity-60"
-                >
-                  {createMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+              <div style={{ display:'flex', gap:10, paddingTop:4 }}>
+                <button type="button" onClick={() => setShowModal(false)} className="btn-ghost" style={{ flex:1, padding:'10px', borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer' }}>Cancel</button>
+                <button type="submit" disabled={createMutation.isPending} className="btn-orange" style={{ flex:1, padding:'10px', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                  {createMutation.isPending && <Loader2 size={14} className="animate-spin-slow" />}
                   Create Mandate
                 </button>
               </div>
@@ -414,7 +224,6 @@ export default function Mandates() {
           </div>
         </div>
       )}
-
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );

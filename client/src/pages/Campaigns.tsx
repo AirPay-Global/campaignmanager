@@ -1,24 +1,12 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Play, Pause, BarChart2, Loader2, X } from 'lucide-react';
+import { Plus, Play, Pause, BarChart2, Loader2, X, Megaphone } from 'lucide-react';
 import api from '../lib/api';
 import { ToastContainer, useToast } from '../components/Toast';
 
-interface Campaign {
-  id: string;
-  name: string;
-  description?: string;
-  type: string;
-  status: string;
-  channels: string[];
-  schedule_at?: string;
-  created_at: string;
-}
-
-interface CampaignsResponse {
-  data: Campaign[];
-  total?: number;
-}
+interface Campaign { id: string; name: string; description?: string; type: string; status: string; channels: string[]; schedule_at?: string; created_at: string; }
+interface CampaignsResponse { data: Campaign[]; total?: number; }
+interface FormState { name: string; description: string; type: string; channels: string[]; schedule_at: string; }
 
 const CAMPAIGN_TYPES = [
   { value: 'outbound_blast', label: 'Outbound Blast' },
@@ -26,39 +14,32 @@ const CAMPAIGN_TYPES = [
   { value: 'trigger_based', label: 'Trigger Based' },
   { value: 'scheduled', label: 'Scheduled' },
 ];
-
 const CHANNELS = ['whatsapp', 'sms', 'email'];
+const defaultForm: FormState = { name:'', description:'', type:'outbound_blast', channels:[], schedule_at:'' };
 
-const statusStyles: Record<string, string> = {
-  draft: 'bg-slate-100 text-slate-600',
-  active: 'bg-green-100 text-green-700',
-  paused: 'bg-yellow-100 text-yellow-700',
-  completed: 'bg-blue-100 text-blue-700',
+const statusMap: Record<string, { bg:string; dot:string; text:string }> = {
+  draft:     { bg:'rgba(68,68,68,0.3)',    dot:'#666',    text:'#888'    },
+  running:   { bg:'rgba(34,197,94,0.1)',   dot:'#22c55e', text:'#4ade80' },
+  active:    { bg:'rgba(34,197,94,0.1)',   dot:'#22c55e', text:'#4ade80' },
+  scheduled: { bg:'rgba(59,130,246,0.1)',  dot:'#3b82f6', text:'#60a5fa' },
+  paused:    { bg:'rgba(245,158,11,0.1)',  dot:'#f59e0b', text:'#fbbf24' },
+  completed: { bg:'rgba(139,92,246,0.1)',  dot:'#8b5cf6', text:'#a78bfa' },
+  failed:    { bg:'rgba(239,68,68,0.1)',   dot:'#ef4444', text:'#f87171' },
 };
 
 function StatusBadge({ status }: { status: string }) {
+  const s = statusMap[status] ?? statusMap.draft;
   return (
-    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${statusStyles[status] ?? 'bg-slate-100 text-slate-600'}`}>
+    <span style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'3px 10px', borderRadius:20, background:s.bg, fontSize:12, fontWeight:600, color:s.text }}>
+      <span style={{ width:5, height:5, borderRadius:'50%', background:s.dot, flexShrink:0 }} />
       {status}
     </span>
   );
 }
 
-interface FormState {
-  name: string;
-  description: string;
-  type: string;
-  channels: string[];
-  schedule_at: string;
+function Label({ children }: { children: React.ReactNode }) {
+  return <label style={{ display:'block', fontSize:11, color:'#666', marginBottom:6, letterSpacing:'0.07em', textTransform:'uppercase' as const, fontWeight:600 }}>{children}</label>;
 }
-
-const defaultForm: FormState = {
-  name: '',
-  description: '',
-  type: 'outbound_blast',
-  channels: [],
-  schedule_at: '',
-};
 
 export default function Campaigns() {
   const qc = useQueryClient();
@@ -69,47 +50,28 @@ export default function Campaigns() {
 
   const { data, isLoading } = useQuery<CampaignsResponse>({
     queryKey: ['campaigns'],
-    queryFn: () => api.get('/campaigns').then((r) => r.data),
+    queryFn: () => api.get('/campaigns').then(r => r.data),
   });
-
   const campaigns: Campaign[] = data?.data ?? [];
 
   const createMutation = useMutation({
-    mutationFn: (payload: Partial<FormState>) => api.post('/campaigns', payload),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['campaigns'] });
-      addToast('success', 'Campaign created successfully.');
-      setShowModal(false);
-      setForm(defaultForm);
-    },
-    onError: (err: unknown) => {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-        'Failed to create campaign.';
-      addToast('error', msg);
-    },
+    mutationFn: (p: Partial<FormState>) => api.post('/campaigns', p),
+    onSuccess: () => { qc.invalidateQueries({ queryKey:['campaigns'] }); addToast('success','Campaign created.'); setShowModal(false); setForm(defaultForm); },
+    onError: (err: unknown) => addToast('error', (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to create campaign.'),
   });
-
   const launchMutation = useMutation({
     mutationFn: (id: string) => api.post(`/campaigns/${id}/launch`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['campaigns'] });
-      addToast('success', 'Campaign launched.');
-    },
-    onError: () => addToast('error', 'Failed to launch campaign.'),
+    onSuccess: () => { qc.invalidateQueries({ queryKey:['campaigns'] }); addToast('success','Campaign launched.'); },
+    onError: () => addToast('error','Failed to launch.'),
   });
-
   const pauseMutation = useMutation({
     mutationFn: (id: string) => api.post(`/campaigns/${id}/pause`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['campaigns'] });
-      addToast('success', 'Campaign paused.');
-    },
-    onError: () => addToast('error', 'Failed to pause campaign.'),
+    onSuccess: () => { qc.invalidateQueries({ queryKey:['campaigns'] }); addToast('success','Campaign paused.'); },
+    onError: () => addToast('error','Failed to pause.'),
   });
 
   const validate = () => {
-    const errors: Record<string, string> = {};
+    const errors: Record<string,string> = {};
     if (!form.name.trim()) errors.name = 'Name is required.';
     if (form.channels.length === 0) errors.channels = 'Select at least one channel.';
     setFormErrors(errors);
@@ -119,221 +81,131 @@ export default function Campaigns() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
-    const payload: Record<string, unknown> = {
-      name: form.name,
-      description: form.description,
-      type: form.type,
-      channels: form.channels,
-    };
+    const payload: Record<string,unknown> = { name:form.name, description:form.description, type:form.type, channels:form.channels };
     if (form.schedule_at) payload.schedule_at = form.schedule_at;
     createMutation.mutate(payload as Partial<FormState>);
   };
 
-  const toggleChannel = (ch: string) => {
-    setForm((prev) => ({
-      ...prev,
-      channels: prev.channels.includes(ch)
-        ? prev.channels.filter((c) => c !== ch)
-        : [...prev.channels, ch],
-    }));
-  };
+  const toggleChannel = (ch: string) => setForm(p => ({ ...p, channels: p.channels.includes(ch) ? p.channels.filter(c=>c!==ch) : [...p.channels, ch] }));
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
+    <div style={{ padding:'32px', minHeight:'100vh', background:'#0a0a0a' }}>
+      <div className="animate-fade-in-up" style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:28 }}>
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Campaigns</h1>
-          <p className="text-slate-500 text-sm mt-1">Manage your messaging campaigns</p>
+          <h1 style={{ fontSize:28, fontWeight:800, color:'#fff', letterSpacing:'-0.03em', margin:0 }}>Campaigns</h1>
+          <p style={{ fontSize:13, color:'#555', marginTop:4 }}>Manage your messaging campaigns</p>
         </div>
-        <button
-          onClick={() => { setShowModal(true); setForm(defaultForm); setFormErrors({}); }}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          New Campaign
+        <button className="btn-orange" onClick={() => { setShowModal(true); setForm(defaultForm); setFormErrors({}); }}
+          style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 18px', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer' }}>
+          <Plus size={15} /> New Campaign
         </button>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-        <div className="overflow-x-auto">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+      <div className="card animate-fade-in-up stagger-2" style={{ overflow:'hidden' }}>
+        {isLoading ? (
+          <div style={{ padding:40, display:'flex', flexDirection:'column', gap:14 }}>
+            {[1,2,3,4].map(i => <div key={i} className="skeleton" style={{ height:18, borderRadius:4, width:`${50+i*10}%` }} />)}
+          </div>
+        ) : campaigns.length === 0 ? (
+          <div style={{ padding:'56px 24px', textAlign:'center' }}>
+            <div style={{ width:56, height:56, borderRadius:12, background:'rgba(255,102,0,0.08)', border:'1px solid rgba(255,102,0,0.15)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px' }}>
+              <Megaphone size={24} color="#ff6600" />
             </div>
-          ) : campaigns.length === 0 ? (
-            <div className="text-center py-16">
-              <Megaphone className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500 text-sm font-medium">No campaigns yet. Create your first one.</p>
-            </div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide border-b border-slate-200">
-                  <th className="text-left px-6 py-3 font-medium">Name</th>
-                  <th className="text-left px-6 py-3 font-medium">Type</th>
-                  <th className="text-left px-6 py-3 font-medium">Status</th>
-                  <th className="text-left px-6 py-3 font-medium">Channels</th>
-                  <th className="text-left px-6 py-3 font-medium">Created</th>
-                  <th className="text-right px-6 py-3 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {campaigns.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50">
-                    <td className="px-6 py-3 font-medium text-slate-700">{c.name}</td>
-                    <td className="px-6 py-3 text-slate-500 capitalize">{c.type?.replace(/_/g, ' ')}</td>
-                    <td className="px-6 py-3">
-                      <StatusBadge status={c.status} />
-                    </td>
-                    <td className="px-6 py-3">
-                      <div className="flex gap-1 flex-wrap">
-                        {(c.channels ?? []).map((ch) => (
-                          <span key={ch} className="inline-flex px-2 py-0.5 rounded text-xs bg-indigo-50 text-indigo-700 font-medium capitalize">
-                            {ch}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-3 text-slate-500">
-                      {c.created_at ? new Date(c.created_at).toLocaleDateString() : '—'}
-                    </td>
-                    <td className="px-6 py-3">
-                      <div className="flex items-center justify-end gap-2">
-                        {c.status === 'draft' || c.status === 'paused' ? (
-                          <button
-                            onClick={() => launchMutation.mutate(c.id)}
-                            disabled={launchMutation.isPending}
-                            title="Launch"
-                            className="p-1.5 rounded-lg text-green-600 hover:bg-green-50 transition-colors disabled:opacity-50"
-                          >
-                            <Play className="w-4 h-4" />
-                          </button>
-                        ) : null}
-                        {c.status === 'active' ? (
-                          <button
-                            onClick={() => pauseMutation.mutate(c.id)}
-                            disabled={pauseMutation.isPending}
-                            title="Pause"
-                            className="p-1.5 rounded-lg text-yellow-600 hover:bg-yellow-50 transition-colors disabled:opacity-50"
-                          >
-                            <Pause className="w-4 h-4" />
-                          </button>
-                        ) : null}
-                        <button
-                          title="View Analytics"
-                          className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 transition-colors"
-                        >
-                          <BarChart2 className="w-4 h-4" />
+            <p style={{ color:'#555', fontSize:14, margin:0 }}>No campaigns yet.</p>
+            <p style={{ color:'#333', fontSize:13, marginTop:4 }}>Create your first campaign to start messaging.</p>
+          </div>
+        ) : (
+          <table className="dark-table">
+            <thead><tr>
+              <th>Name</th><th>Type</th><th>Status</th><th>Channels</th><th>Created</th><th style={{ textAlign:'right' }}>Actions</th>
+            </tr></thead>
+            <tbody>
+              {campaigns.map(c => (
+                <tr key={c.id}>
+                  <td style={{ color:'#e5e5e5', fontWeight:500 }}>{c.name}</td>
+                  <td style={{ color:'#666', fontSize:12 }}>{c.type?.replace(/_/g,' ')}</td>
+                  <td><StatusBadge status={c.status} /></td>
+                  <td>
+                    <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+                      {(c.channels??[]).map(ch => (
+                        <span key={ch} style={{ fontSize:11, padding:'2px 7px', borderRadius:4, background:'rgba(255,102,0,0.08)', color:'#ff8833', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>{ch}</span>
+                      ))}
+                    </div>
+                  </td>
+                  <td style={{ color:'#555' }}>{c.created_at ? new Date(c.created_at).toLocaleDateString() : '—'}</td>
+                  <td>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-end', gap:4 }}>
+                      {['draft','paused'].includes(c.status) && (
+                        <button onClick={() => launchMutation.mutate(c.id)} disabled={launchMutation.isPending}
+                          style={{ padding:'5px 10px', borderRadius:6, background:'rgba(34,197,94,0.1)', border:'1px solid rgba(34,197,94,0.2)', color:'#4ade80', cursor:'pointer', display:'flex', alignItems:'center', gap:4, fontSize:12 }}>
+                          <Play size={12} /> Launch
                         </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+                      )}
+                      {c.status === 'active' && (
+                        <button onClick={() => pauseMutation.mutate(c.id)} disabled={pauseMutation.isPending}
+                          style={{ padding:'5px 10px', borderRadius:6, background:'rgba(245,158,11,0.1)', border:'1px solid rgba(245,158,11,0.2)', color:'#fbbf24', cursor:'pointer', display:'flex', alignItems:'center', gap:4, fontSize:12 }}>
+                          <Pause size={12} /> Pause
+                        </button>
+                      )}
+                      <button style={{ padding:'5px', borderRadius:6, background:'transparent', border:'1px solid #1e1e1e', color:'#555', cursor:'pointer' }}>
+                        <BarChart2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
-      {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-              <h2 className="text-base font-semibold text-slate-800">New Campaign</h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
+        <div className="modal-overlay">
+          <div className="animate-slide-up" style={{ background:'#111', border:'1px solid #2a2a2a', borderRadius:16, width:'100%', maxWidth:500, maxHeight:'90vh', overflowY:'auto', overflow:'hidden' }}>
+            <div className="orange-line" />
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'20px 24px', borderBottom:'1px solid #1e1e1e' }}>
+              <span style={{ fontSize:15, fontWeight:700, color:'#fff' }}>New Campaign</span>
+              <button onClick={() => setShowModal(false)} style={{ background:'none', border:'none', color:'#555', cursor:'pointer' }}><X size={18} /></button>
             </div>
-            <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
-              {/* Name */}
+            <form onSubmit={handleSubmit} style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:16 }}>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="Campaign name"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                {formErrors.name && <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>}
+                <Label>Name *</Label>
+                <input type="text" value={form.name} onChange={e => setForm(p=>({...p,name:e.target.value}))} placeholder="Campaign name" className="input-dark" />
+                {formErrors.name && <p style={{ color:'#f87171', fontSize:12, marginTop:4 }}>{formErrors.name}</p>}
               </div>
-
-              {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
-                <textarea
-                  value={form.description}
-                  onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-                  rows={3}
-                  placeholder="Optional description"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                />
+                <Label>Description</Label>
+                <textarea value={form.description} onChange={e => setForm(p=>({...p,description:e.target.value}))} rows={2} placeholder="Optional description" className="input-dark" style={{ resize:'none' }} />
               </div>
-
-              {/* Type */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Campaign Type</label>
-                <select
-                  value={form.type}
-                  onChange={(e) => setForm((p) => ({ ...p, type: e.target.value }))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-                >
-                  {CAMPAIGN_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
-                  ))}
+                <Label>Campaign Type</Label>
+                <select value={form.type} onChange={e => setForm(p=>({...p,type:e.target.value}))} className="select-dark">
+                  {CAMPAIGN_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
-
-              {/* Channels */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Channels <span className="text-red-500">*</span>
-                </label>
-                <div className="flex gap-4">
-                  {CHANNELS.map((ch) => (
-                    <label key={ch} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={form.channels.includes(ch)}
-                        onChange={() => toggleChannel(ch)}
-                        className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
-                      />
-                      <span className="text-sm text-slate-700 capitalize">{ch}</span>
-                    </label>
+                <Label>Channels *</Label>
+                <div style={{ display:'flex', gap:8 }}>
+                  {CHANNELS.map(ch => (
+                    <button key={ch} type="button" onClick={() => toggleChannel(ch)} style={{
+                      padding:'6px 14px', borderRadius:6, fontSize:12, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em', cursor:'pointer',
+                      border: form.channels.includes(ch) ? '1px solid #ff6600' : '1px solid #2a2a2a',
+                      background: form.channels.includes(ch) ? 'rgba(255,102,0,0.12)' : 'transparent',
+                      color: form.channels.includes(ch) ? '#ff8833' : '#555',
+                      transition:'all 0.15s',
+                    }}>{ch}</button>
                   ))}
                 </div>
-                {formErrors.channels && <p className="text-red-500 text-xs mt-1">{formErrors.channels}</p>}
+                {formErrors.channels && <p style={{ color:'#f87171', fontSize:12, marginTop:4 }}>{formErrors.channels}</p>}
               </div>
-
-              {/* Schedule At */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Schedule At (optional)</label>
-                <input
-                  type="datetime-local"
-                  value={form.schedule_at}
-                  onChange={(e) => setForm((p) => ({ ...p, schedule_at: e.target.value }))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                <Label>Schedule At (optional)</Label>
+                <input type="datetime-local" value={form.schedule_at} onChange={e => setForm(p=>({...p,schedule_at:e.target.value}))} className="input-dark" style={{ colorScheme:'dark' }} />
               </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={createMutation.isPending}
-                  className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2.5 rounded-lg transition-colors disabled:opacity-60"
-                >
-                  {createMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+              <div style={{ display:'flex', gap:10, paddingTop:4 }}>
+                <button type="button" onClick={() => setShowModal(false)} className="btn-ghost" style={{ flex:1, padding:'10px', borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer' }}>Cancel</button>
+                <button type="submit" disabled={createMutation.isPending} className="btn-orange" style={{ flex:1, padding:'10px', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                  {createMutation.isPending && <Loader2 size={14} className="animate-spin-slow" />}
                   Create Campaign
                 </button>
               </div>
@@ -344,13 +216,5 @@ export default function Campaigns() {
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
-  );
-}
-
-function Megaphone({ className }: { className?: string }) {
-  return (
-    <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 1 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 0 1-1.44-4.282m3.102.069a18.03 18.03 0 0 1-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 0 1 8.835 2.535M10.34 6.66a23.847 23.847 0 0 1 8.835-2.535m0 0A23.74 23.74 0 0 1 18.795 3c1.456 0 2.812.044 4.061.418M21 12a2.25 2.25 0 0 1-2.25 2.25H15a3.75 3.75 0 0 0-3.75 3.75v.75a2.25 2.25 0 0 1-2.25 2.25H3.75A2.25 2.25 0 0 1 1.5 18.75V5.25A2.25 2.25 0 0 1 3.75 3h5.25a2.25 2.25 0 0 1 2.25 2.25v.75" />
-    </svg>
   );
 }

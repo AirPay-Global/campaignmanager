@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Zap } from 'lucide-react';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -13,10 +13,8 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
     if (!email) { setError('Email is required'); return; }
     if (!password) { setError('Password is required'); return; }
-
     setLoading(true);
     try {
       const res = await api.post('/auth/login', { email, password });
@@ -26,12 +24,9 @@ export default function Login() {
       navigate('/dashboard');
     } catch (err: unknown) {
       const msg =
-        (err as { response?: { data?: { message?: string; error?: string } } })
-          ?.response?.data?.message ??
-        (err as { response?: { data?: { error?: string } } })
-          ?.response?.data?.error ??
-        (err as Error)?.message ??
-        'Login failed';
+        (err as { response?: { data?: { message?: string; error?: string } } })?.response?.data?.message ??
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
+        (err as Error)?.message ?? 'Login failed';
       setError(msg);
     } finally {
       setLoading(false);
@@ -39,59 +34,136 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <div className="mb-8 text-center">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-indigo-600 mb-4">
-              <span className="text-white font-bold text-xl">AP</span>
+    <div className="grid-bg" style={{
+      minHeight: '100vh',
+      background: '#0a0a0a',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 16,
+    }}>
+      {/* Animated background glow */}
+      <div style={{
+        position: 'fixed',
+        top: '20%',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: 600,
+        height: 600,
+        borderRadius: '50%',
+        background: 'radial-gradient(circle, rgba(255,102,0,0.06) 0%, transparent 70%)',
+        pointerEvents: 'none',
+      }} />
+
+      <div className="animate-fade-in-up" style={{
+        width: '100%',
+        maxWidth: 420,
+        position: 'relative',
+      }}>
+        {/* Card */}
+        <div style={{
+          background: '#111',
+          border: '1px solid #2a2a2a',
+          borderRadius: 16,
+          overflow: 'hidden',
+        }}>
+          {/* Orange top line */}
+          <div className="orange-line" />
+
+          <div style={{ padding: '36px 36px 32px' }}>
+            {/* Logo */}
+            <div style={{ textAlign: 'center', marginBottom: 32 }}>
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 52,
+                height: 52,
+                background: '#ff6600',
+                borderRadius: 12,
+                marginBottom: 16,
+                boxShadow: '0 0 24px rgba(255,102,0,0.4)',
+              }}>
+                <Zap size={24} color="#fff" fill="#fff" />
+              </div>
+              <div style={{ fontSize: 22, fontWeight: 800, color: '#fff', letterSpacing: '-0.03em' }}>
+                AirPay Global
+              </div>
+              <div style={{ fontSize: 12, color: '#555', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 4 }}>
+                Campaign Manager
+              </div>
             </div>
-            <h1 className="text-2xl font-bold text-slate-800">AirPay Global</h1>
-            <p className="text-slate-500 text-sm mt-1">Campaign Manager</p>
+
+            {error && (
+              <div className="animate-fade-in" style={{
+                marginBottom: 20,
+                padding: '10px 14px',
+                background: 'rgba(239,68,68,0.08)',
+                border: '1px solid rgba(239,68,68,0.2)',
+                borderRadius: 8,
+                fontSize: 13,
+                color: '#f87171',
+              }}>
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#666', marginBottom: 6, letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600 }}>
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="you@airpayglobal.com"
+                  className="input-dark"
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#666', marginBottom: 6, letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600 }}>
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="input-dark"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="btn-orange"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  letterSpacing: '0.03em',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  marginTop: 4,
+                }}
+              >
+                {loading && <Loader2 size={16} className="animate-spin-slow" />}
+                {loading ? 'Signing in…' : 'Sign In'}
+              </button>
+            </form>
           </div>
+        </div>
 
-          {error && (
-            <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Email
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {loading ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
+        {/* Bottom label */}
+        <div style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: '#333' }}>
+          FAST &nbsp;›&nbsp; SECURE &nbsp;›&nbsp; MULTI-CHANNEL
         </div>
       </div>
     </div>
