@@ -25,6 +25,7 @@ RUN npm ci --only=production
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/client/dist ./client/dist
+COPY supabase/migrations ./supabase/migrations
 
 ENV NODE_ENV=production
 
