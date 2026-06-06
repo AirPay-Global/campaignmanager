@@ -18,6 +18,9 @@ import webhookRoutes from './routes/webhooks.routes';
 
 const app = express();
 
+// Required for Railway/proxied deployments — fixes rate limiter X-Forwarded-For error
+app.set('trust proxy', 1);
+
 // ─── Security Middleware ─────────────────────────────────────────────────────
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(
