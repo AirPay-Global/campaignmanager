@@ -19,7 +19,7 @@ import webhookRoutes from './routes/webhooks.routes';
 const app = express();
 
 // ─── Security Middleware ─────────────────────────────────────────────────────
-app.use(helmet());
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(
   cors({
     origin: process.env.ALLOWED_ORIGINS?.split(',') ?? '*',
@@ -67,7 +67,9 @@ app.get('*', (req: Request, res: Response) => {
   if (req.path.startsWith('/api/') || req.path.startsWith('/webhooks')) {
     return res.status(404).json({ error: 'Not Found', message: 'Endpoint not found' });
   }
-  res.sendFile(path.join(clientDist, 'index.html'));
+  res.sendFile(path.join(clientDist, 'index.html'), (err) => {
+    if (err) res.status(500).json({ error: 'UI not built', message: 'client/dist/index.html not found' });
+  });
 });
 
 // ─── Global Error Handler ────────────────────────────────────────────────────

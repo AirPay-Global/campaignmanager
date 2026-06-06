@@ -8,7 +8,7 @@ RUN npm ci
 
 COPY tsconfig.json ./
 COPY src/ ./src/
-RUN npm run build
+RUN npx tsc
 
 COPY client/package*.json ./client/
 RUN cd client && npm ci
