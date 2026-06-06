@@ -4,7 +4,6 @@
  * This is the entry point for the Railway "queue-worker" service.
  * It processes outbound messages every 10 seconds independently of the API server.
  */
-import 'dotenv/config';
 import cron from 'node-cron';
 import { logger } from './lib/logger';
 import { processQueue } from './engines/queue.engine';
