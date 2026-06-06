@@ -194,12 +194,13 @@ class MandateEngine {
         if (contactId) {
           const tags = action_config['tags'] as string[] | undefined;
           if (tags?.length) {
-            await supabase.rpc('array_append_unique', {
+            const { error: rpcError } = await supabase.rpc('array_append_unique', {
               row_id: contactId,
               table_name: 'contacts',
               column_name: 'tags',
               new_values: tags,
-            }).catch(async () => {
+            });
+            if (rpcError) {
               // Fallback: fetch and merge tags
               const { data: contact } = await supabase
                 .from('contacts')
@@ -209,7 +210,7 @@ class MandateEngine {
               const existing = (contact?.tags as string[]) ?? [];
               const merged = [...new Set([...existing, ...tags])];
               await supabase.from('contacts').update({ tags: merged }).eq('id', contactId);
-            });
+            }
           }
         }
         break;

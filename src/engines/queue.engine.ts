@@ -1,6 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { logger } from '../lib/logger';
-import { sendWhatsAppTemplate, sendWhatsAppText } from '../adapters/whatsapp.adapter';
+import { sendWhatsAppTemplate, sendWhatsAppText, WhatsAppTemplateComponent } from '../adapters/whatsapp.adapter';
 import { sendSMS } from '../adapters/sms.adapter';
 import { sendEmail } from '../adapters/email.adapter';
 
@@ -352,7 +352,7 @@ export async function processMessage(message: OutboundMessage): Promise<void> {
 
 function buildWhatsAppComponents(
   templateVars: Record<string, unknown>,
-): Array<{ type: string; parameters: Array<{ type: string; text: string }> }> {
+): WhatsAppTemplateComponent[] {
   const bodyParams = Object.values(templateVars).map((v) => ({
     type: 'text' as const,
     text: String(v),
@@ -362,7 +362,7 @@ function buildWhatsAppComponents(
 
   return [
     {
-      type: 'body',
+      type: 'body' as const,
       parameters: bodyParams,
     },
   ];
