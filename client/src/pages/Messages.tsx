@@ -10,7 +10,7 @@ import { ToastContainer, useToast } from '../components/Toast';
 
 interface Contact { id: string; name: string; phone_number?: string; whatsapp_number?: string; email?: string; opted_out?: boolean; }
 interface ContactsResponse { data: Contact[]; }
-interface OutboundMessage { id: string; channel: string; recipient_id: string; body?: string; subject?: string; template_name?: string; status: string; created_at: string; }
+interface OutboundMessage { id: string; channel: string; recipient_id: string; body?: string; subject?: string; template_name?: string; status: string; error_message?: string; created_at: string; }
 interface OutboundResponse { data: OutboundMessage[]; total: number; totalPages: number; }
 
 type Channel = 'whatsapp' | 'sms' | 'email';
@@ -504,6 +504,11 @@ export default function Messages() {
                             <span className="status-dot" style={{ background: STATUS_COLORS[msg.status] ?? 'rgba(255,255,255,0.2)' }} />
                             {msg.status}
                           </span>
+                          {msg.error_message && (
+                            <div style={{ fontSize: 11, color: '#f87171', marginTop: 3, maxWidth: 200, wordBreak: 'break-word' }}>
+                              {msg.error_message}
+                            </div>
+                          )}
                         </td>
                         <td style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', whiteSpace: 'nowrap' }}>
                           {new Date(msg.created_at).toLocaleString()}
