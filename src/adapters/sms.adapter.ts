@@ -4,16 +4,15 @@ import { logger } from '../lib/logger';
 let atInstance: ReturnType<typeof AfricasTalking> | null = null;
 
 function getATInstance(): ReturnType<typeof AfricasTalking> {
-  if (!atInstance) {
-    const apiKey = process.env.AT_API_KEY;
-    const username = process.env.AT_USERNAME;
+  const apiKey = process.env.AT_API_KEY;
+  const username = process.env.AT_USERNAME;
 
-    if (!apiKey || !username) {
-      throw new Error("Missing Africa's Talking credentials: AT_API_KEY and AT_USERNAME are required");
-    }
-
-    atInstance = AfricasTalking({ apiKey, username });
+  if (!apiKey || !username) {
+    throw new Error("Missing Africa's Talking credentials: AT_API_KEY and AT_USERNAME are required");
   }
+
+  // Re-create instance if credentials changed
+  atInstance = AfricasTalking({ apiKey, username });
   return atInstance;
 }
 
@@ -78,13 +77,12 @@ export async function sendSMS(
       error: status === 'failed' ? recipient?.status : undefined,
     };
   } catch (err: unknown) {
-    const error = err as Error;
-    logger.error('Failed to send SMS', { phone, error: error.message });
-    return {
-      phone,
-      status: 'failed',
-      error: error.message,
-    };
+    const error = err as { response?: { data?: unknown; status?: number }; message?: string };
+    const detail = error.response?.data
+      ? `AT error ${error.response.status ?? ''}: ${JSON.stringify(error.response.data)}`
+      : (error.message ?? 'Unknown error');
+    logger.error('Failed to send SMS', { phone, error: detail });
+    return { phone, status: 'failed', error: detail };
   }
 }
 
