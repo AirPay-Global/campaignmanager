@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Campaigns from './pages/Campaigns';
 import Contacts from './pages/Contacts';
 import Mandates from './pages/Mandates';
+import Messages from './pages/Messages';
 import Layout from './components/Layout';
 
 const queryClient = new QueryClient({
@@ -57,6 +58,16 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <Contacts />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/messages"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Messages />
                 </Layout>
               </ProtectedRoute>
             }

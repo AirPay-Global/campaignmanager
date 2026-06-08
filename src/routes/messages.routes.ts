@@ -121,6 +121,61 @@ router.get(
   }),
 );
 
+// POST /messages/send-bulk — send to multiple recipients
+router.post(
+  '/send-bulk',
+  asyncHandler(async (req, res) => {
+    const orgId = req.user!.org_id;
+    const body = req.body as {
+      channel?: string;
+      recipients?: Array<{ recipient_id: string; contact_id?: string }>;
+      body?: string;
+      subject?: string;
+      template_name?: string;
+      template_vars?: Record<string, unknown>;
+      scheduled_at?: string;
+    };
+
+    if (!body.channel || !Array.isArray(body.recipients) || body.recipients.length === 0) {
+      res.status(400).json({ error: 'Bad Request', message: 'channel and recipients[] are required' });
+      return;
+    }
+    if (!body.body && !body.template_name) {
+      res.status(400).json({ error: 'Bad Request', message: 'Either body or template_name is required' });
+      return;
+    }
+    const validChannels = ['whatsapp', 'sms', 'email', 'push'];
+    if (!validChannels.includes(body.channel)) {
+      res.status(400).json({ error: 'Bad Request', message: `channel must be one of: ${validChannels.join(', ')}` });
+      return;
+    }
+
+    const results: Array<{ recipient_id: string; messageId?: string; error?: string }> = [];
+    for (const r of body.recipients) {
+      try {
+        const messageId = await enqueue({
+          orgId,
+          channel: body.channel as 'whatsapp' | 'sms' | 'email' | 'push',
+          recipientId: r.recipient_id,
+          body: body.body,
+          subject: body.subject,
+          templateName: body.template_name,
+          templateVars: body.template_vars,
+          contactId: r.contact_id,
+          scheduledAt: body.scheduled_at,
+        });
+        results.push({ recipient_id: r.recipient_id, messageId });
+      } catch (err) {
+        results.push({ recipient_id: r.recipient_id, error: (err as Error).message });
+      }
+    }
+
+    const succeeded = results.filter(r => r.messageId).length;
+    logger.info('Bulk messages enqueued', { orgId, total: results.length, succeeded, channel: body.channel });
+    res.status(202).json({ success: true, total: results.length, succeeded, results });
+  }),
+);
+
 // POST /messages/send — one-off message send
 router.post(
   '/send',
