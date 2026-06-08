@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Send, History, MessageSquare, Phone, Mail, Search,
-  CheckSquare, Square, ChevronDown, Loader2, X, AlertCircle,
+  CheckSquare, Square, ChevronDown, Loader2, AlertCircle,
   MessageCircle,
 } from 'lucide-react';
 import api from '../lib/api';
