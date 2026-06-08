@@ -39,7 +39,7 @@ export interface WhatsAppMessageResponse {
 }
 
 function getPhoneNumberId(override?: string): string {
-  const id = override ?? process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const id = override ?? process.env.WHATSAPP_PHONE_ID ?? process.env.WHATSAPP_PHONE_NUMBER_ID;
   if (!id) {
     throw new Error('WHATSAPP_PHONE_NUMBER_ID is not configured');
   }
