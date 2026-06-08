@@ -2,78 +2,74 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Megaphone, Users, Shield, LogOut, Zap } from 'lucide-react';
 
 const navItems = [
-  { to: '/dashboard', label: 'Dashboard',  icon: LayoutDashboard },
-  { to: '/campaigns', label: 'Campaigns',  icon: Megaphone },
-  { to: '/contacts',  label: 'Contacts',   icon: Users },
-  { to: '/mandates',  label: 'Mandates',   icon: Shield },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/campaigns', label: 'Campaigns', icon: Megaphone },
+  { to: '/contacts',  label: 'Contacts',  icon: Users },
+  { to: '/mandates',  label: 'Mandates',  icon: Shield },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#0a0a0a', overflow: 'hidden' }}>
+    <div style={{ display:'flex', height:'100vh', background:'#06060f', overflow:'hidden', position:'relative' }}>
+      {/* Aurora background */}
+      <div className="aurora-bg" />
+
       {/* Sidebar */}
       <aside style={{
         width: 220,
         flexShrink: 0,
-        background: '#0d0d0d',
-        borderRight: '1px solid #1e1e1e',
+        background: 'rgba(255,255,255,0.025)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        borderRight: '1px solid rgba(255,255,255,0.06)',
         display: 'flex',
         flexDirection: 'column',
+        position: 'relative',
+        zIndex: 1,
+        boxShadow: 'inset -1px 0 0 rgba(255,255,255,0.03)',
       }}>
         {/* Logo */}
         <div style={{
           padding: '24px 20px 20px',
-          borderBottom: '1px solid #1a1a1a',
+          borderBottom: '1px solid rgba(255,255,255,0.05)',
           display: 'flex',
           alignItems: 'center',
           gap: 12,
         }}>
           <div style={{
-            width: 36,
-            height: 36,
-            background: '#ff6600',
-            borderRadius: 8,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            width: 36, height: 36,
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.08) 100%)',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: 10,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0,
-            boxShadow: '0 0 16px rgba(255,102,0,0.4)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 12px rgba(0,0,0,0.3)',
           }}>
-            <Zap size={18} color="#fff" fill="#fff" />
+            <Zap size={16} color="#fff" fill="rgba(255,255,255,0.9)" />
           </div>
           <div>
-            <div style={{ color: '#fff', fontWeight: 700, fontSize: 13, letterSpacing: '-0.02em' }}>
-              AirPay
-            </div>
-            <div style={{ color: '#555', fontSize: 11, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-              Campaigns
-            </div>
+            <div style={{ color:'#fff', fontWeight:700, fontSize:13, letterSpacing:'-0.02em' }}>AirPay</div>
+            <div style={{ color:'rgba(255,255,255,0.3)', fontSize:10, letterSpacing:'0.1em', textTransform:'uppercase' }}>Campaigns</div>
           </div>
         </div>
 
         {/* Nav */}
-        <nav style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <nav style={{ flex:1, padding:'12px 10px', display:'flex', flexDirection:'column', gap:2 }}>
           {navItems.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              style={({ isActive }) => ({
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '9px 12px',
-                borderRadius: 8,
-                fontSize: 13,
-                fontWeight: 500,
-                textDecoration: 'none',
-                transition: 'all 0.15s',
-                color: isActive ? '#fff' : '#666',
-                background: isActive ? 'rgba(255,102,0,0.12)' : 'transparent',
-                borderLeft: isActive ? '2px solid #ff6600' : '2px solid transparent',
-              })}
-            >
+            <NavLink key={to} to={to} style={({ isActive }) => ({
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '9px 12px', borderRadius: 10,
+              fontSize: 13, fontWeight: 500, textDecoration: 'none',
+              transition: 'all 0.2s ease',
+              color: isActive ? '#fff' : 'rgba(255,255,255,0.4)',
+              background: isActive
+                ? 'linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.04) 100%)'
+                : 'transparent',
+              border: isActive ? '1px solid rgba(255,255,255,0.1)' : '1px solid transparent',
+              boxShadow: isActive ? 'inset 0 1px 0 rgba(255,255,255,0.12)' : 'none',
+            })}>
               <Icon size={15} />
               {label}
             </NavLink>
@@ -81,27 +77,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </nav>
 
         {/* Logout */}
-        <div style={{ padding: '12px 10px', borderTop: '1px solid #1a1a1a' }}>
+        <div style={{ padding:'12px 10px', borderTop:'1px solid rgba(255,255,255,0.05)' }}>
           <button
             onClick={() => { localStorage.removeItem('token'); navigate('/login'); }}
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              width: '100%',
-              padding: '9px 12px',
-              borderRadius: 8,
-              fontSize: 13,
-              fontWeight: 500,
-              color: '#555',
-              background: 'transparent',
-              border: 'none',
-              cursor: 'pointer',
-              transition: 'color 0.15s',
-              textAlign: 'left',
+              display:'flex', alignItems:'center', gap:10, width:'100%',
+              padding:'9px 12px', borderRadius:10, fontSize:13, fontWeight:500,
+              color:'rgba(255,255,255,0.3)', background:'transparent', border:'none', cursor:'pointer',
+              transition:'color 0.2s',
             }}
-            onMouseEnter={e => (e.currentTarget.style.color = '#ff6600')}
-            onMouseLeave={e => (e.currentTarget.style.color = '#555')}
+            onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.3)')}
           >
             <LogOut size={15} />
             Logout
@@ -110,7 +96,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main */}
-      <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+      <main style={{ flex:1, overflowY:'auto', position:'relative', zIndex:1 }}>
         {children}
       </main>
     </div>
