@@ -3,25 +3,30 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Send, History, MessageSquare, Phone, Mail, Search,
   CheckSquare, Square, ChevronDown, Loader2, AlertCircle,
-  MessageCircle,
+  MessageCircle, FileText, Plus, Trash2,
 } from 'lucide-react';
 import api from '../lib/api';
 import { ToastContainer, useToast } from '../components/Toast';
 
 interface Contact { id: string; name: string; phone_number?: string; whatsapp_number?: string; email?: string; opted_out?: boolean; }
 interface ContactsResponse { data: Contact[]; }
-interface OutboundMessage { id: string; channel: string; recipient_id: string; body?: string; subject?: string; status: string; created_at: string; }
+interface OutboundMessage { id: string; channel: string; recipient_id: string; body?: string; subject?: string; template_name?: string; status: string; created_at: string; }
 interface OutboundResponse { data: OutboundMessage[]; total: number; totalPages: number; }
 
 type Channel = 'whatsapp' | 'sms' | 'email';
 type RecipientMode = 'single' | 'group';
+type MessageType = 'text' | 'template';
 type Tab = 'compose' | 'history';
+
+interface TemplateVar { key: string; value: string; }
 
 const CHANNEL_META: Record<Channel, { label: string; icon: React.ReactNode; placeholder: string; field: keyof Contact }> = {
   whatsapp: { label: 'WhatsApp', icon: <MessageCircle size={14} />, placeholder: '+264811234567', field: 'whatsapp_number' },
   sms:      { label: 'SMS',      icon: <Phone size={14} />,         placeholder: '+264811234567', field: 'phone_number' },
   email:    { label: 'Email',    icon: <Mail size={14} />,          placeholder: 'user@example.com', field: 'email' },
 };
+
+const LANG_CODES = ['en_US', 'en_GB', 'af', 'sq', 'ar', 'az', 'bn', 'bg', 'ca', 'zh_CN', 'zh_TW', 'hr', 'cs', 'da', 'nl', 'et', 'fil', 'fi', 'fr', 'ka', 'de', 'el', 'gu', 'ha', 'he', 'hi', 'hu', 'id', 'ga', 'it', 'ja', 'kn', 'kk', 'ko', 'lo', 'lv', 'lt', 'mk', 'ms', 'ml', 'mr', 'nb', 'fa', 'pl', 'pt_BR', 'pt_PT', 'pa', 'ro', 'ru', 'sr', 'sk', 'sl', 'es', 'es_AR', 'es_ES', 'es_MX', 'sw', 'sv', 'ta', 'te', 'th', 'tr', 'uk', 'ur', 'uz', 'vi', 'zu'];
 
 const STATUS_COLORS: Record<string, string> = {
   sent: '#22c55e', delivered: '#22c55e', pending: '#f59e0b',
@@ -35,10 +40,14 @@ export default function Messages() {
 
   // Compose state
   const [channel, setChannel] = useState<Channel>('whatsapp');
+  const [msgType, setMsgType] = useState<MessageType>('text');
   const [mode, setMode] = useState<RecipientMode>('single');
   const [singleRecipient, setSingleRecipient] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  const [templateName, setTemplateName] = useState('');
+  const [langCode, setLangCode] = useState('en_US');
+  const [templateVars, setTemplateVars] = useState<TemplateVar[]>([]);
   const [contactSearch, setContactSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -56,8 +65,7 @@ export default function Messages() {
     const q = contactSearch.toLowerCase();
     return allContacts.filter(c => {
       if (c.opted_out) return false;
-      const hasChannel = !!c[CHANNEL_META[channel].field];
-      if (!hasChannel) return false;
+      if (!c[CHANNEL_META[channel].field]) return false;
       if (!q) return true;
       return c.name?.toLowerCase().includes(q) || c.phone_number?.includes(q) || c.email?.toLowerCase().includes(q);
     });
@@ -71,11 +79,19 @@ export default function Messages() {
     enabled: tab === 'history',
   });
 
+  const buildPayload = (extra: object) => {
+    if (msgType === 'template') {
+      const vars = templateVars.reduce<Record<string, string>>((acc, v) => { if (v.key) acc[v.key] = v.value; return acc; }, {});
+      return { channel, template_name: templateName, template_vars: Object.keys(vars).length ? vars : undefined, ...extra };
+    }
+    return { channel, body, ...(subject ? { subject } : {}), ...extra };
+  };
+
   const sendSingle = useMutation({
     mutationFn: (payload: object) => api.post('/messages/send', payload),
     onSuccess: () => {
       addToast('success', 'Message sent successfully.');
-      setBody(''); setSubject(''); setSingleRecipient('');
+      setBody(''); setSubject(''); setSingleRecipient(''); setTemplateName(''); setTemplateVars([]);
       qc.invalidateQueries({ queryKey: ['messages-outbound'] });
     },
     onError: (err: unknown) => addToast('error', (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to send.'),
@@ -86,44 +102,42 @@ export default function Messages() {
     onSuccess: (res) => {
       const { succeeded, total } = res.data as { succeeded: number; total: number };
       addToast(succeeded === total ? 'success' : 'error', `Sent ${succeeded} of ${total} messages.`);
-      setBody(''); setSubject(''); setSelectedIds(new Set());
+      setBody(''); setSubject(''); setSelectedIds(new Set()); setTemplateName(''); setTemplateVars([]);
       qc.invalidateQueries({ queryKey: ['messages-outbound'] });
     },
     onError: (err: unknown) => addToast('error', (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to send bulk.'),
   });
 
   const handleSend = () => {
-    if (!body.trim()) { addToast('error', 'Message body is required.'); return; }
-    if (channel === 'email' && !subject.trim()) { addToast('error', 'Subject is required for email.'); return; }
+    if (msgType === 'text' && !body.trim()) { addToast('error', 'Message body is required.'); return; }
+    if (msgType === 'text' && channel === 'email' && !subject.trim()) { addToast('error', 'Subject is required for email.'); return; }
+    if (msgType === 'template' && !templateName.trim()) { addToast('error', 'Template name is required.'); return; }
 
     if (mode === 'single') {
       if (!singleRecipient.trim()) { addToast('error', 'Recipient is required.'); return; }
-      sendSingle.mutate({ channel, recipient_id: singleRecipient.trim(), body, ...(subject ? { subject } : {}) });
+      sendSingle.mutate(buildPayload({ recipient_id: singleRecipient.trim() }));
     } else {
       if (selectedIds.size === 0) { addToast('error', 'Select at least one contact.'); return; }
       const field = CHANNEL_META[channel].field;
       const recipients = allContacts
         .filter(c => selectedIds.has(c.id))
         .map(c => ({ recipient_id: c[field] as string, contact_id: c.id }));
-      sendBulk.mutate({ channel, recipients, body, ...(subject ? { subject } : {}) });
+      sendBulk.mutate(buildPayload({ recipients }));
     }
   };
 
   const toggleContact = (id: string) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   };
 
   const toggleAll = () => {
-    if (selectedIds.size === filteredContacts.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredContacts.map(c => c.id)));
-    }
+    setSelectedIds(selectedIds.size === filteredContacts.length ? new Set() : new Set(filteredContacts.map(c => c.id)));
   };
+
+  const addTemplateVar = () => setTemplateVars(v => [...v, { key: '', value: '' }]);
+  const updateTemplateVar = (i: number, field: 'key' | 'value', val: string) =>
+    setTemplateVars(v => v.map((item, idx) => idx === i ? { ...item, [field]: val } : item));
+  const removeTemplateVar = (i: number) => setTemplateVars(v => v.filter((_, idx) => idx !== i));
 
   const isSending = sendSingle.isPending || sendBulk.isPending;
 
@@ -193,7 +207,34 @@ export default function Messages() {
                 </div>
               </div>
 
-              {/* Mode */}
+              {/* Message type — template toggle only for WhatsApp */}
+              {channel === 'whatsapp' && (
+                <div>
+                  <span className="chrome-label">Message Type</span>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {(['text', 'template'] as MessageType[]).map(t => (
+                      <button key={t} onClick={() => setMsgType(t)} style={{
+                        flex: 1, padding: '9px 10px', borderRadius: 9, fontSize: 12, fontWeight: 600,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                        cursor: 'pointer', transition: 'all 0.2s',
+                        border: msgType === t ? '1px solid rgba(168,85,247,0.4)' : '1px solid rgba(255,255,255,0.08)',
+                        background: msgType === t ? 'rgba(168,85,247,0.12)' : 'rgba(255,255,255,0.03)',
+                        color: msgType === t ? '#c084fc' : 'rgba(255,255,255,0.4)',
+                      }}>
+                        {t === 'text' ? <MessageCircle size={13} /> : <FileText size={13} />}
+                        {t === 'text' ? 'Free Text' : 'Template'}
+                      </button>
+                    ))}
+                  </div>
+                  {msgType === 'template' && (
+                    <div style={{ marginTop: 8, padding: '10px 12px', background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.15)', borderRadius: 9, fontSize: 12, color: 'rgba(192,132,252,0.8)', lineHeight: 1.5 }}>
+                      Templates must be pre-approved in Meta Business Manager. Free text only works within a 24-hour window after the contact messages you first.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Recipients */}
               <div>
                 <span className="chrome-label">Recipients</span>
                 <div style={{ display: 'flex', gap: 6, marginBottom: mode === 'single' ? 10 : 0 }}>
@@ -209,64 +250,135 @@ export default function Messages() {
                     </button>
                   ))}
                 </div>
-
                 {mode === 'single' && (
-                  <input
-                    type="text"
-                    value={singleRecipient}
-                    onChange={e => setSingleRecipient(e.target.value)}
-                    placeholder={CHANNEL_META[channel].placeholder}
-                    className="input-glass"
-                  />
+                  <input type="text" value={singleRecipient} onChange={e => setSingleRecipient(e.target.value)}
+                    placeholder={CHANNEL_META[channel].placeholder} className="input-glass" />
                 )}
               </div>
 
-              {/* Subject (email only) */}
-              {channel === 'email' && (
-                <div>
-                  <span className="chrome-label">Subject</span>
-                  <input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Email subject…" className="input-glass" />
-                </div>
+              {/* Template fields */}
+              {msgType === 'template' && (
+                <>
+                  <div>
+                    <span className="chrome-label">Template Name</span>
+                    <input type="text" value={templateName} onChange={e => setTemplateName(e.target.value)}
+                      placeholder="e.g. 3p_direct_integration_test_template" className="input-glass" />
+                  </div>
+
+                  <div>
+                    <span className="chrome-label">Language</span>
+                    <div style={{ position: 'relative' }}>
+                      <ChevronDown size={12} color="rgba(255,255,255,0.3)" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                      <select value={langCode} onChange={e => setLangCode(e.target.value)} className="select-glass" style={{ paddingRight: 30 }}>
+                        {LANG_CODES.map(lc => <option key={lc} value={lc}>{lc}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <span className="chrome-label" style={{ margin: 0 }}>Template Variables</span>
+                      <button onClick={addTemplateVar} style={{
+                        display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600,
+                        color: '#818cf8', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)',
+                        borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
+                      }}>
+                        <Plus size={11} /> Add Variable
+                      </button>
+                    </div>
+                    {templateVars.length === 0 ? (
+                      <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', padding: '8px 0' }}>
+                        No variables — add if your template has dynamic fields like {'{{1}}'} or {'{{name}}'}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {templateVars.map((v, i) => (
+                          <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                            <input type="text" value={v.key} onChange={e => updateTemplateVar(i, 'key', e.target.value)}
+                              placeholder="key (e.g. 1 or name)" className="input-glass" style={{ flex: 1 }} />
+                            <input type="text" value={v.value} onChange={e => updateTemplateVar(i, 'value', e.target.value)}
+                              placeholder="value" className="input-glass" style={{ flex: 2 }} />
+                            <button onClick={() => removeTemplateVar(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.2)', padding: 4, display: 'flex' }}
+                              onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                              onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.2)')}>
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
 
-              {/* Body */}
-              <div style={{ flex: 1 }}>
-                <span className="chrome-label">Message</span>
-                <textarea
-                  value={body}
-                  onChange={e => setBody(e.target.value)}
-                  placeholder="Type your message here…"
-                  className="input-glass"
-                  style={{ resize: 'vertical', minHeight: 120, lineHeight: 1.6 }}
-                />
-                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', textAlign: 'right', marginTop: 4 }}>
-                  {body.length} chars
-                </div>
-              </div>
+              {/* Text fields */}
+              {msgType === 'text' && (
+                <>
+                  {channel === 'email' && (
+                    <div>
+                      <span className="chrome-label">Subject</span>
+                      <input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Email subject…" className="input-glass" />
+                    </div>
+                  )}
+                  <div style={{ flex: 1 }}>
+                    <span className="chrome-label">Message</span>
+                    <textarea value={body} onChange={e => setBody(e.target.value)}
+                      placeholder="Type your message here…" className="input-glass"
+                      style={{ resize: 'vertical', minHeight: 120, lineHeight: 1.6 }} />
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', textAlign: 'right', marginTop: 4 }}>{body.length} chars</div>
+                  </div>
+                </>
+              )}
 
               {/* Send */}
-              <button
-                className="btn-chrome"
-                onClick={handleSend}
-                disabled={isSending}
-                style={{ padding: '13px', borderRadius: 10, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
-              >
+              <button className="btn-chrome" onClick={handleSend} disabled={isSending}
+                style={{ padding: '13px', borderRadius: 10, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 {isSending ? <Loader2 size={15} className="animate-spin-slow" /> : <Send size={15} />}
                 {isSending ? 'Sending…' : mode === 'single' ? 'Send Message' : `Send to ${selectedIds.size || '…'} contacts`}
               </button>
             </div>
 
-            {/* Right: contact picker (group) or preview (single) */}
+            {/* Right: contact picker or single hint */}
             <div className="glass" style={{ borderRadius: 16, padding: 28, display: 'flex', flexDirection: 'column', gap: 16 }}>
               {mode === 'single' ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 14, opacity: 0.5 }}>
-                  <div style={{ width: 52, height: 52, borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <MessageCircle size={22} color="rgba(255,255,255,0.3)" />
+                /* Template preview panel */
+                msgType === 'template' && templateName ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>Preview</div>
+                    <div style={{ padding: 16, background: 'rgba(37,211,102,0.06)', border: '1px solid rgba(37,211,102,0.15)', borderRadius: 12 }}>
+                      <div style={{ fontSize: 11, color: 'rgba(37,211,102,0.6)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>WhatsApp Template</div>
+                      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 4 }}>
+                        <span style={{ color: 'rgba(255,255,255,0.4)' }}>Name: </span>
+                        <span style={{ fontFamily: 'monospace', color: '#c084fc' }}>{templateName}</span>
+                      </div>
+                      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 4 }}>
+                        <span style={{ color: 'rgba(255,255,255,0.4)' }}>Language: </span>{langCode}
+                      </div>
+                      {templateVars.length > 0 && (
+                        <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginBottom: 6 }}>Variables</div>
+                          {templateVars.filter(v => v.key).map((v, i) => (
+                            <div key={i} style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', fontFamily: 'monospace' }}>
+                              {'{{' + v.key + '}}'} → {v.value || '—'}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', lineHeight: 1.5 }}>
+                      To: {singleRecipient || <span style={{ color: 'rgba(255,255,255,0.15)' }}>enter recipient on the left</span>}
+                    </div>
                   </div>
-                  <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, textAlign: 'center', margin: 0 }}>
-                    Enter a recipient on the left to send a single message.
-                  </p>
-                </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 14, opacity: 0.5 }}>
+                    <div style={{ width: 52, height: 52, borderRadius: 12, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <MessageCircle size={22} color="rgba(255,255,255,0.3)" />
+                    </div>
+                    <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: 13, textAlign: 'center', margin: 0 }}>
+                      Enter a recipient on the left to send a single message.
+                    </p>
+                  </div>
+                )
               ) : (
                 <>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -331,8 +443,7 @@ export default function Messages() {
         {/* History */}
         {tab === 'history' && (
           <div className="animate-slide-up">
-            {/* Filters */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
               <div style={{ position: 'relative' }}>
                 <ChevronDown size={12} color="rgba(255,255,255,0.3)" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
                 <select value={historyChannel} onChange={e => { setHistoryChannel(e.target.value); setHistoryPage(1); }} className="select-glass" style={{ paddingRight: 30, width: 'auto', minWidth: 150 }}>
@@ -362,7 +473,7 @@ export default function Messages() {
                     <tr>
                       <th>Channel</th>
                       <th>Recipient</th>
-                      <th>Message</th>
+                      <th>Message / Template</th>
                       <th>Status</th>
                       <th>Sent</th>
                     </tr>
@@ -377,9 +488,16 @@ export default function Messages() {
                         </td>
                         <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{msg.recipient_id}</td>
                         <td style={{ maxWidth: 300 }}>
-                          <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>
-                            {msg.subject ? `[${msg.subject}] ` : ''}{msg.body ?? '—'}
-                          </span>
+                          {msg.template_name ? (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                              <FileText size={12} color="#c084fc" />
+                              <span style={{ color: '#c084fc', fontFamily: 'monospace' }}>{msg.template_name}</span>
+                            </span>
+                          ) : (
+                            <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'rgba(255,255,255,0.6)', fontSize: 13 }}>
+                              {msg.subject ? `[${msg.subject}] ` : ''}{msg.body ?? '—'}
+                            </span>
+                          )}
                         </td>
                         <td>
                           <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: STATUS_COLORS[msg.status] ?? 'rgba(255,255,255,0.4)' }}>
@@ -397,7 +515,6 @@ export default function Messages() {
               )}
             </div>
 
-            {/* Pagination */}
             {historyData && historyData.totalPages > 1 && (
               <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 16 }}>
                 {Array.from({ length: historyData.totalPages }, (_, i) => i + 1).map(p => (
@@ -407,9 +524,7 @@ export default function Messages() {
                     background: p === historyPage ? 'rgba(99,102,241,0.15)' : 'rgba(255,255,255,0.03)',
                     color: p === historyPage ? '#818cf8' : 'rgba(255,255,255,0.4)',
                     cursor: 'pointer',
-                  }}>
-                    {p}
-                  </button>
+                  }}>{p}</button>
                 ))}
               </div>
             )}
