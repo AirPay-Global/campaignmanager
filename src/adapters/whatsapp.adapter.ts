@@ -93,13 +93,13 @@ export async function sendWhatsAppTemplate(
 
     return response.data;
   } catch (err: unknown) {
-    const error = err as { response?: { data?: unknown }; message?: string };
-    logger.error('Failed to send WhatsApp template', {
-      to: options.to,
-      templateName: options.templateName,
-      error: error.response?.data ?? error.message,
-    });
-    throw err;
+    const error = err as { response?: { data?: { error?: { message?: string; code?: number; type?: string } } }; message?: string };
+    const metaError = error.response?.data?.error;
+    const detail = metaError
+      ? `Meta API error ${metaError.code ?? ''}: ${metaError.message ?? 'Unknown'}`
+      : (error.message ?? 'Unknown error');
+    logger.error('Failed to send WhatsApp template', { to: options.to, templateName: options.templateName, error: error.response?.data ?? error.message });
+    throw new Error(detail);
   }
 }
 
@@ -138,12 +138,13 @@ export async function sendWhatsAppText(
 
     return response.data;
   } catch (err: unknown) {
-    const error = err as { response?: { data?: unknown }; message?: string };
-    logger.error('Failed to send WhatsApp text', {
-      to: options.to,
-      error: error.response?.data ?? error.message,
-    });
-    throw err;
+    const error = err as { response?: { data?: { error?: { message?: string; code?: number } } }; message?: string };
+    const metaError = error.response?.data?.error;
+    const detail = metaError
+      ? `Meta API error ${metaError.code ?? ''}: ${metaError.message ?? 'Unknown'}`
+      : (error.message ?? 'Unknown error');
+    logger.error('Failed to send WhatsApp text', { to: options.to, error: error.response?.data ?? error.message });
+    throw new Error(detail);
   }
 }
 
