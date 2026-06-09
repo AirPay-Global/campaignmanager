@@ -1,9 +1,123 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Play, Pause, BarChart2, Loader2, X, Megaphone, Mail } from 'lucide-react';
+import { Plus, Play, Pause, BarChart2, Loader2, X, Megaphone, Mail, Send, CheckCircle2, Eye, MousePointerClick, AlertCircle } from 'lucide-react';
 import api from '../lib/api';
 import { ToastContainer, useToast } from '../components/Toast';
+
+interface CampaignStats {
+  campaignId: string;
+  total: number;
+  pending: number;
+  queued: number;
+  sent: number;
+  delivered: number;
+  read: number;
+  failed: number;
+  bounced: number;
+  opened: number;
+  clicked: number;
+  deliveryRate: number;
+  openRate: number;
+  clickRate: number;
+  failureRate: number;
+}
+
+function StatBar({ label, value, max, color, icon: Icon }: { label: string; value: number; max: number; color: string; icon: React.ElementType }) {
+  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+          <Icon size={12} color={color} />
+          {label}
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <span style={{ fontSize: 18, fontWeight: 700, color: '#fff', letterSpacing: '-0.03em' }}>{value.toLocaleString()}</span>
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', minWidth: 36, textAlign: 'right' }}>{pct}%</span>
+        </div>
+      </div>
+      <div style={{ height: 4, borderRadius: 4, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, borderRadius: 4, background: color, transition: 'width 0.6s ease' }} />
+      </div>
+    </div>
+  );
+}
+
+function AnalyticsModal({ campaignId, campaignName, onClose }: { campaignId: string; campaignName: string; onClose: () => void }) {
+  const { data: stats, isLoading } = useQuery<CampaignStats>({
+    queryKey: ['campaign-analytics', campaignId],
+    queryFn: () => api.get(`/campaigns/${campaignId}/analytics`).then(r => r.data),
+  });
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="glass animate-slide-up" style={{ width: '100%', maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>Campaign Analytics</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{campaignName}</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}><X size={17} /></button>
+        </div>
+
+        <div style={{ padding: '24px' }}>
+          {isLoading ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {[1,2,3,4,5].map(i => <div key={i} className="skeleton" style={{ height: 40 }} />)}
+            </div>
+          ) : !stats ? (
+            <p style={{ color: 'rgba(255,255,255,0.3)', textAlign: 'center', padding: '24px 0' }}>No data available.</p>
+          ) : (
+            <>
+              {/* Headline numbers */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 24 }}>
+                {[
+                  { label: 'Audience', value: stats.total, color: 'rgba(255,255,255,0.6)' },
+                  { label: 'Sent', value: stats.sent + stats.delivered + stats.read, color: '#818cf8' },
+                  { label: 'Failed', value: stats.failed + stats.bounced, color: '#f87171' },
+                ].map(({ label, value, color }) => (
+                  <div key={label} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '14px 16px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 26, fontWeight: 800, color, letterSpacing: '-0.04em' }}>{value.toLocaleString()}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 3, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Rate bars */}
+              <StatBar label="Delivered" value={stats.delivered + stats.read} max={stats.total} color="#4ade80" icon={CheckCircle2} />
+              <StatBar label="Opened" value={stats.opened} max={stats.total} color="#818cf8" icon={Eye} />
+              <StatBar label="Clicked" value={stats.clicked} max={stats.total} color="#38bdf8" icon={MousePointerClick} />
+              <StatBar label="Failed / Bounced" value={stats.failed + stats.bounced} max={stats.total} color="#f87171" icon={AlertCircle} />
+
+              {/* Rates row */}
+              <div style={{ display: 'flex', gap: 10, marginTop: 20, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                {[
+                  { label: 'Delivery Rate', value: `${stats.deliveryRate}%`, color: '#4ade80' },
+                  { label: 'Open Rate', value: `${stats.openRate}%`, color: '#818cf8' },
+                  { label: 'Click Rate', value: `${stats.clickRate}%`, color: '#38bdf8' },
+                ].map(({ label, value, color }) => (
+                  <div key={label} style={{ flex: 1, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, padding: '10px', textAlign: 'center' }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color, letterSpacing: '-0.03em' }}>{value}</div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 2 }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Pending/queued note */}
+              {(stats.pending + stats.queued) > 0 && (
+                <div style={{ marginTop: 14, padding: '10px 14px', borderRadius: 8, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)', fontSize: 12, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Send size={12} />
+                  {stats.pending + stats.queued} message{stats.pending + stats.queued !== 1 ? 's' : ''} still in queue
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface Campaign {
   id: string;
@@ -72,6 +186,7 @@ export default function Campaigns() {
   const navigate = useNavigate();
   const { toasts, addToast, dismissToast } = useToast();
   const [showModal, setShowModal] = useState(false);
+  const [analyticsId, setAnalyticsId] = useState<{ id: string; name: string } | null>(null);
   const [form, setForm] = useState<FormState>(defaultForm);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
@@ -234,7 +349,11 @@ export default function Campaigns() {
                             <Pause size={11} /> Pause
                           </button>
                         )}
-                        <button style={{ padding: '5px 8px', borderRadius: 7, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}>
+                        <button
+                          onClick={() => setAnalyticsId({ id: c.id, name: c.name })}
+                          style={{ padding: '5px 8px', borderRadius: 7, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}
+                          title="View analytics"
+                        >
                           <BarChart2 size={13} />
                         </button>
                       </div>
@@ -393,6 +512,13 @@ export default function Campaigns() {
             </form>
           </div>
         </div>
+      )}
+      {analyticsId && (
+        <AnalyticsModal
+          campaignId={analyticsId.id}
+          campaignName={analyticsId.name}
+          onClose={() => setAnalyticsId(null)}
+        />
       )}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>

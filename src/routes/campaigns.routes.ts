@@ -278,6 +278,31 @@ router.post(
   }),
 );
 
+// GET /campaigns/stats — dashboard summary
+router.get(
+  '/stats',
+  asyncHandler(async (req, res) => {
+    const orgId = req.user!.org_id;
+
+    const [campaignsRes, msgsRes] = await Promise.all([
+      supabase.from('campaigns').select('id, status', { count: 'exact' }).eq('org_id', orgId),
+      supabase.from('outbound_messages').select('status, created_at').eq('org_id', orgId).gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()),
+    ]);
+
+    const campaigns = (campaignsRes.data ?? []) as Array<{ id: string; status: string }>;
+    const msgs = (msgsRes.data ?? []) as Array<{ status: string; created_at: string }>;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const activeCampaigns = campaigns.filter(c => ['running', 'active'].includes(c.status)).length;
+    const sentToday = msgs.filter(m => m.created_at?.startsWith(todayStr)).length;
+    const delivered = msgs.filter(m => ['delivered', 'read'].includes(m.status)).length;
+    const failed = msgs.filter(m => m.status === 'failed').length;
+    const deliveryRate = msgs.length > 0 ? Math.round((delivered / msgs.length) * 100) : 0;
+
+    res.json({ activeCampaigns, sentToday, totalMessages30d: msgs.length, delivered, failed, deliveryRate });
+  }),
+);
+
 // GET /campaigns/:id/analytics
 router.get(
   '/:id/analytics',

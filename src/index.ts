@@ -18,6 +18,7 @@ import contactRoutes from './routes/contacts.routes';
 import messageRoutes from './routes/messages.routes';
 import webhookRoutes from './routes/webhooks.routes';
 import segmentRoutes from './routes/segments.routes';
+import trackingRoutes from './routes/tracking.routes';
 
 const app = express();
 
@@ -54,6 +55,9 @@ app.get('/health', (_req: Request, res: Response) => {
 // ─── Webhook Routes (no auth, no API rate limit) ─────────────────────────────
 app.use('/webhooks', webhookRoutes);
 
+// ─── Tracking Routes (no auth — called by email clients) ─────────────────────
+app.use('/track', trackingRoutes);
+
 // ─── API Routes ──────────────────────────────────────────────────────────────
 app.use('/api/v1', apiRateLimiter);
 app.use('/api/v1/auth', authRoutes);
@@ -72,7 +76,7 @@ app.use(express.static(clientDist));
 // SPA catch-all — must come AFTER all /api and /webhooks routes
 app.get('*', (req: Request, res: Response) => {
   // Don't intercept API or webhook paths that weren't matched above
-  if (req.path.startsWith('/api/') || req.path.startsWith('/webhooks')) {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/webhooks') || req.path.startsWith('/track')) {
     return res.status(404).json({ error: 'Not Found', message: 'Endpoint not found' });
   }
   res.sendFile(path.join(clientDist, 'index.html'), (err) => {

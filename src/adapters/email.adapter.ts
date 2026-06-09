@@ -19,6 +19,22 @@ function getFromAddress(fromOverride?: string, fromNameOverride?: string): strin
   return `${name} <${email}>`;
 }
 
+function injectTracking(html: string, messageId: string, baseUrl: string): string {
+  const pixel = `<img src="${baseUrl}/track/open/${encodeURIComponent(messageId)}" width="1" height="1" style="display:none;border:0;outline:none" alt="">`;
+
+  let tracked = html.includes('</body>')
+    ? html.replace('</body>', `${pixel}</body>`)
+    : html + pixel;
+
+  // Wrap http(s) links, skip already-wrapped tracking URLs
+  tracked = tracked.replace(/href="(https?:\/\/[^"]+)"/g, (match, url: string) => {
+    if (url.includes('/track/click/')) return match;
+    return `href="${baseUrl}/track/click/${encodeURIComponent(messageId)}?url=${encodeURIComponent(url)}"`;
+  });
+
+  return tracked;
+}
+
 export interface EmailOptions {
   to: string;
   subject: string;
@@ -27,6 +43,7 @@ export interface EmailOptions {
   from?: string;
   fromName?: string;
   replyTo?: string;
+  messageId?: string;
 }
 
 export interface EmailResult {
@@ -57,12 +74,18 @@ function chunkArray<T>(arr: T[], size: number): T[][] {
 export async function sendEmail(options: EmailOptions): Promise<EmailResult> {
   const transporter = createTransport();
 
+  let htmlBody = options.html;
+  if (htmlBody && options.messageId) {
+    const baseUrl = process.env.APP_URL ?? '';
+    if (baseUrl) htmlBody = injectTracking(htmlBody, options.messageId, baseUrl);
+  }
+
   try {
     const info = await transporter.sendMail({
       from: getFromAddress(options.from, options.fromName),
       to: options.to,
       subject: options.subject,
-      html: options.html,
+      html: htmlBody,
       text: options.text,
       replyTo: options.replyTo,
     });

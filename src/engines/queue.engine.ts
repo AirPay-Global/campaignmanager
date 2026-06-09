@@ -257,11 +257,14 @@ export async function processMessage(message: OutboundMessage): Promise<void> {
         if (!message.body && !message.template_name) {
           throw new Error('Email message has no body or template');
         }
+        const body = message.body ?? '';
+        const isHtml = body.trimStart().startsWith('<');
         const result = await sendEmail({
           to: message.recipient_id,
           subject: message.subject ?? 'Message from AirPay',
-          text: message.body ?? undefined,
-          html: undefined,
+          html: isHtml ? body : undefined,
+          text: !isHtml ? body : undefined,
+          messageId: message.id,
         });
         externalId = result.messageId;
         if (result.status === 'failed') {

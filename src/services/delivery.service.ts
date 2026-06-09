@@ -11,8 +11,11 @@ export interface CampaignStats {
   read: number;
   failed: number;
   bounced: number;
+  opened: number;
+  clicked: number;
   deliveryRate: number;
   openRate: number;
+  clickRate: number;
   failureRate: number;
 }
 
@@ -58,17 +61,49 @@ class DeliveryService {
       { pending: 0, queued: 0, sent: 0, delivered: 0, read: 0, failed: 0, bounced: 0 },
     );
 
-    const successCount = counts.sent + counts.delivered + counts.read;
+    // Count unique opens and clicks from delivery_logs via outbound_messages
+    const { data: outboundIds } = await supabase
+      .from('outbound_messages')
+      .select('id')
+      .eq('campaign_id', campaignId);
+
+    const msgIds = (outboundIds ?? []).map((m: { id: string }) => m.id);
+
+    let opened = 0;
+    let clicked = 0;
+
+    if (msgIds.length > 0) {
+      const { data: openRows } = await supabase
+        .from('delivery_logs')
+        .select('outbound_message_id')
+        .in('outbound_message_id', msgIds)
+        .eq('event_type', 'opened');
+
+      const { data: clickRows } = await supabase
+        .from('delivery_logs')
+        .select('outbound_message_id')
+        .in('outbound_message_id', msgIds)
+        .eq('event_type', 'clicked');
+
+      // Count unique per message (an email client may fire the pixel multiple times)
+      opened = new Set((openRows ?? []).map((r: { outbound_message_id: string }) => r.outbound_message_id)).size;
+      clicked = new Set((clickRows ?? []).map((r: { outbound_message_id: string }) => r.outbound_message_id)).size;
+    }
+
     const deliveryRate = total > 0 ? (counts.delivered + counts.read) / total : 0;
-    const openRate = total > 0 ? counts.read / total : 0;
+    const openRate = total > 0 ? opened / total : 0;
+    const clickRate = total > 0 ? clicked / total : 0;
     const failureRate = total > 0 ? (counts.failed + counts.bounced) / total : 0;
 
     return {
       campaignId,
       total,
       ...counts,
+      opened,
+      clicked,
       deliveryRate: Math.round(deliveryRate * 10000) / 100,
       openRate: Math.round(openRate * 10000) / 100,
+      clickRate: Math.round(clickRate * 10000) / 100,
       failureRate: Math.round(failureRate * 10000) / 100,
     };
   }
