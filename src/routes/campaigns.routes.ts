@@ -31,6 +31,7 @@ router.get(
       .from('campaigns')
       .select('*', { count: 'exact' })
       .eq('org_id', orgId)
+      .eq('is_template', false)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -53,6 +54,28 @@ router.get(
       limit,
       totalPages: Math.ceil((count ?? 0) / limit),
     });
+  }),
+);
+
+// GET /campaigns/templates
+router.get(
+  '/templates',
+  asyncHandler(async (req, res) => {
+    const orgId = req.user!.org_id;
+
+    const { data, error } = await supabase
+      .from('campaigns')
+      .select('*')
+      .eq('org_id', orgId)
+      .eq('is_template', true)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+      return;
+    }
+
+    res.json({ data: data ?? [] });
   }),
 );
 
@@ -275,6 +298,114 @@ router.post(
     await campaignEngine.pause(id, userId);
 
     res.json({ success: true });
+  }),
+);
+
+// POST /campaigns/:id/clone
+router.post(
+  '/:id/clone',
+  asyncHandler(async (req, res) => {
+    const orgId = req.user!.org_id;
+    const userId = req.user!.sub;
+    const { id } = req.params;
+    const { name: customName } = req.body as { name?: string };
+
+    const { data: source, error: fetchError } = await supabase
+      .from('campaigns')
+      .select('*')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .single();
+
+    if (fetchError || !source) {
+      res.status(404).json({ error: 'Not Found', message: 'Campaign not found' });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('campaigns')
+      .insert({
+        org_id: orgId,
+        name: customName ?? `Copy of ${source.name}`,
+        description: source.description,
+        channel: source.channel,
+        status: 'draft',
+        segment_id: source.segment_id,
+        template_name: source.template_name,
+        template_vars: source.template_vars,
+        message_body: source.message_body,
+        subject: source.subject,
+        from_name: source.from_name,
+        metadata: source.metadata ?? {},
+        is_template: false,
+        template_id: id,
+        created_by: userId,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+      return;
+    }
+
+    await auditService.log(orgId, userId, 'campaign.created', 'campaign', data.id as string, {
+      cloned_from: id,
+    });
+
+    res.status(201).json(data);
+  }),
+);
+
+// POST /campaigns/:id/save-as-template
+router.post(
+  '/:id/save-as-template',
+  asyncHandler(async (req, res) => {
+    const orgId = req.user!.org_id;
+    const userId = req.user!.sub;
+    const { id } = req.params;
+    const { name: customName } = req.body as { name?: string };
+
+    const { data: source, error: fetchError } = await supabase
+      .from('campaigns')
+      .select('*')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .single();
+
+    if (fetchError || !source) {
+      res.status(404).json({ error: 'Not Found', message: 'Campaign not found' });
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('campaigns')
+      .insert({
+        org_id: orgId,
+        name: customName ?? source.name,
+        description: source.description,
+        channel: source.channel,
+        status: 'draft',
+        segment_id: source.segment_id,
+        template_name: source.template_name,
+        template_vars: source.template_vars,
+        message_body: source.message_body,
+        subject: source.subject,
+        from_name: source.from_name,
+        metadata: source.metadata ?? {},
+        is_template: true,
+        template_id: id,
+        created_by: userId,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+      return;
+    }
+
+    res.status(201).json(data);
   }),
 );
 

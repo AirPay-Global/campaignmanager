@@ -281,11 +281,17 @@ const SQL_004 = `
 ALTER TABLE organizations ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'UTC';
 `;
 
+const SQL_005 = `
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS is_template BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS template_id UUID REFERENCES campaigns(id) ON DELETE SET NULL;
+`;
+
 const MIGRATIONS = [
   { name: '001_initial_schema', sql: SQL_001 },
   { name: '002_rls_policies',   sql: SQL_002 },
   { name: '003_indexes',        sql: SQL_003 },
   { name: '004_org_timezone',   sql: SQL_004 },
+  { name: '005_campaign_templates', sql: SQL_005 },
 ];
 
 export async function runMigrations(): Promise<void> {
