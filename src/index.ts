@@ -17,6 +17,7 @@ import mandateRoutes from './routes/mandates.routes';
 import contactRoutes from './routes/contacts.routes';
 import messageRoutes from './routes/messages.routes';
 import webhookRoutes from './routes/webhooks.routes';
+import segmentRoutes from './routes/segments.routes';
 
 const app = express();
 
@@ -61,6 +62,7 @@ app.use('/api/v1/migrate', migrateRoutes);
 app.use('/api/v1/campaigns', campaignRoutes);
 app.use('/api/v1/mandates', mandateRoutes);
 app.use('/api/v1/contacts', contactRoutes);
+app.use('/api/v1/segments', segmentRoutes);
 app.use('/api/v1/messages', messageRoutes);
 
 // ─── Serve React Client ──────────────────────────────────────────────────────

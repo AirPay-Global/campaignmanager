@@ -1,11 +1,13 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Megaphone, Users, Shield, LogOut, Zap, Send } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Users, Shield, LogOut, Zap, Send, Inbox, Filter } from 'lucide-react';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/campaigns', label: 'Campaigns', icon: Megaphone },
   { to: '/contacts',  label: 'Contacts',  icon: Users },
+  { to: '/segments',  label: 'Segments',  icon: Filter },
   { to: '/messages',  label: 'Messages',  icon: Send },
+  { to: '/inbox',     label: 'Inbox',     icon: Inbox },
   { to: '/mandates',  label: 'Mandates',  icon: Shield },
 ];
 

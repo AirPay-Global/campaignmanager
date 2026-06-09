@@ -7,6 +7,8 @@ import Campaigns from './pages/Campaigns';
 import Contacts from './pages/Contacts';
 import Mandates from './pages/Mandates';
 import Messages from './pages/Messages';
+import InboxPage from './pages/Inbox';
+import Segments from './pages/Segments';
 import Layout from './components/Layout';
 
 const queryClient = new QueryClient({
@@ -68,6 +70,26 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <Messages />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/segments"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Segments />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inbox"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <InboxPage />
                 </Layout>
               </ProtectedRoute>
             }

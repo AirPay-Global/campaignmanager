@@ -4,10 +4,10 @@ import { Plus, Search, Upload, Loader2, X, Users } from 'lucide-react';
 import api from '../lib/api';
 import { ToastContainer, useToast } from '../components/Toast';
 
-interface Contact { id:string; name:string; phone_number?:string; whatsapp_number?:string; email?:string; tags?:string[]; opted_out?:boolean; created_at:string; }
+interface Contact { id:string; name:string; phone?:string; whatsapp_id?:string; email?:string; tags?:string[]; opted_out?:boolean; created_at:string; }
 interface ContactsResponse { data:Contact[]; total?:number; }
-interface FormState { name:string; phone_number:string; whatsapp_number:string; email:string; tags:string; }
-const defaultForm:FormState={name:'',phone_number:'',whatsapp_number:'',email:'',tags:''};
+interface FormState { name:string; phone:string; whatsapp_id:string; email:string; tags:string; }
+const defaultForm:FormState={name:'',phone:'',whatsapp_id:'',email:'',tags:''};
 
 export default function Contacts() {
   const qc=useQueryClient(); const {toasts,addToast,dismissToast}=useToast();
@@ -15,7 +15,7 @@ export default function Contacts() {
   const [formErrors,setFormErrors]=useState<Partial<FormState>>({}); const [search,setSearch]=useState('');
   const {data,isLoading}=useQuery<ContactsResponse>({queryKey:['contacts'],queryFn:()=>api.get('/contacts').then(r=>r.data)});
   const contacts:Contact[]=data?.data??[];
-  const filtered=useMemo(()=>{const q=search.toLowerCase();if(!q)return contacts;return contacts.filter(c=>c.name?.toLowerCase().includes(q)||c.phone_number?.includes(q)||c.email?.toLowerCase().includes(q));},[contacts,search]);
+  const filtered=useMemo(()=>{const q=search.toLowerCase();if(!q)return contacts;return contacts.filter(c=>c.name?.toLowerCase().includes(q)||c.phone?.includes(q)||c.email?.toLowerCase().includes(q));},[contacts,search]);
   const createMutation=useMutation({
     mutationFn:(p:Record<string,unknown>)=>api.post('/contacts',p),
     onSuccess:()=>{qc.invalidateQueries({queryKey:['contacts']});addToast('success','Contact added.');setShowModal(false);setForm(defaultForm);},
@@ -27,7 +27,7 @@ export default function Contacts() {
     onError:()=>addToast('error','Failed to update.'),
   });
   const validate=()=>{const errors:Partial<FormState>={};if(!form.name.trim())errors.name='Name is required.';setFormErrors(errors);return Object.keys(errors).length===0;};
-  const handleSubmit=(e:React.FormEvent)=>{e.preventDefault();if(!validate())return;const payload:Record<string,unknown>={name:form.name};if(form.phone_number)payload.phone_number=form.phone_number;if(form.whatsapp_number)payload.whatsapp_number=form.whatsapp_number;if(form.email)payload.email=form.email;if(form.tags)payload.tags=form.tags.split(',').map(t=>t.trim()).filter(Boolean);createMutation.mutate(payload);};
+  const handleSubmit=(e:React.FormEvent)=>{e.preventDefault();if(!validate())return;const payload:Record<string,unknown>={name:form.name};if(form.phone)payload.phone=form.phone;if(form.whatsapp_id)payload.whatsapp_id=form.whatsapp_id;if(form.email)payload.email=form.email;if(form.tags)payload.tags=form.tags.split(',').map(t=>t.trim()).filter(Boolean);createMutation.mutate(payload);};
   const handleCSV=(e:React.ChangeEvent<HTMLInputElement>)=>{const file=e.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=async(ev)=>{const text=ev.target?.result as string;const lines=text.split('\n').filter(Boolean);if(lines.length<2){addToast('error','CSV needs header + data rows.');return;}const headers=lines[0].split(',').map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));const rows=lines.slice(1).map(row=>{const values=row.split(',').map(v=>v.trim().replace(/^"|"$/g,''));const obj:Record<string,unknown>={};headers.forEach((h,i)=>{if(values[i])obj[h]=values[i];});if(obj.tags&&typeof obj.tags==='string')obj.tags=obj.tags.split(';').map(t=>t.trim()).filter(Boolean);return obj;}).filter(c=>c.name);if(rows.length===0){addToast('error','No valid contacts found.');return;}let success=0,failed=0;for(const row of rows){try{await api.post('/contacts',row);success++;}catch{failed++;}}qc.invalidateQueries({queryKey:['contacts']});addToast(failed===0?'success':'error',`Imported ${success}${failed>0?`, ${failed} failed`:''} contact(s).`);};reader.readAsText(file);e.target.value='';};
 
   return (
@@ -63,8 +63,8 @@ export default function Contacts() {
               <tbody>{filtered.map(c=>(
                 <tr key={c.id}>
                   <td style={{color:'rgba(255,255,255,0.85)',fontWeight:500}}>{c.name}</td>
-                  <td style={{color:'rgba(255,255,255,0.3)'}}>{c.phone_number??'—'}</td>
-                  <td style={{color:'rgba(255,255,255,0.3)'}}>{c.whatsapp_number??'—'}</td>
+                  <td style={{color:'rgba(255,255,255,0.3)'}}>{c.phone??'—'}</td>
+                  <td style={{color:'rgba(255,255,255,0.3)'}}>{c.whatsapp_id??'—'}</td>
                   <td style={{color:'rgba(255,255,255,0.3)'}}>{c.email??'—'}</td>
                   <td><div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{(c.tags??[]).map(tag=><span key={tag} style={{fontSize:11,padding:'2px 7px',borderRadius:4,background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.35)',fontWeight:500}}>{tag}</span>)}</div></td>
                   <td><button onClick={()=>optOutMutation.mutate({id:c.id,opted_out:!c.opted_out})} style={{padding:'3px 12px',borderRadius:20,border:'none',cursor:'pointer',fontSize:12,fontWeight:600,background:c.opted_out?'rgba(239,68,68,0.08)':'rgba(34,197,94,0.08)',color:c.opted_out?'#f87171':'#4ade80',transition:'all 0.15s'}}>{c.opted_out?'Opted out':'Opted in'}</button></td>
@@ -83,7 +83,7 @@ export default function Contacts() {
               <button onClick={()=>setShowModal(false)} style={{background:'none',border:'none',color:'rgba(255,255,255,0.3)',cursor:'pointer'}}><X size={17}/></button>
             </div>
             <form onSubmit={handleSubmit} style={{padding:'20px 24px',display:'flex',flexDirection:'column',gap:14}}>
-              {[{label:'Name *',type:'text',key:'name',ph:'Full name'},{label:'Phone Number',type:'tel',key:'phone_number',ph:'+264...'},{label:'WhatsApp Number',type:'tel',key:'whatsapp_number',ph:'+264...'},{label:'Email',type:'email',key:'email',ph:'contact@example.com'},{label:'Tags (comma-separated)',type:'text',key:'tags',ph:'vip, customer, lead'}].map(({label,type,key,ph})=>(
+              {[{label:'Name *',type:'text',key:'name',ph:'Full name'},{label:'Phone Number',type:'tel',key:'phone',ph:'+264...'},{label:'WhatsApp Number',type:'tel',key:'whatsapp_id',ph:'+264...'},{label:'Email',type:'email',key:'email',ph:'contact@example.com'},{label:'Tags (comma-separated)',type:'text',key:'tags',ph:'vip, customer, lead'}].map(({label,type,key,ph})=>(
                 <div key={key}><span className="chrome-label">{label}</span><input type={type} value={form[key as keyof FormState]} onChange={e=>setForm(p=>({...p,[key]:e.target.value}))} placeholder={ph} className="input-glass"/>{formErrors[key as keyof FormState]&&<p style={{color:'#f87171',fontSize:12,marginTop:4}}>{formErrors[key as keyof FormState]}</p>}</div>
               ))}
               <div style={{display:'flex',gap:10,paddingTop:4}}>
