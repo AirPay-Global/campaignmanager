@@ -286,12 +286,39 @@ ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS is_template BOOLEAN NOT NULL DEFA
 ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS template_id UUID REFERENCES campaigns(id) ON DELETE SET NULL;
 `;
 
+const SQL_006 = `
+CREATE TABLE IF NOT EXISTS ab_tests (
+  id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  org_id         UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name           TEXT NOT NULL,
+  split_percent  INT NOT NULL DEFAULT 50,
+  status         TEXT NOT NULL DEFAULT 'draft',
+  winner_campaign_id UUID,
+  created_by     UUID,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DO $$ BEGIN
+  CREATE TRIGGER trg_ab_tests_updated_at
+    BEFORE UPDATE ON ab_tests FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER TABLE ab_tests ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY ab_tests_org_isolation ON ab_tests FOR ALL TO authenticated USING (org_id = get_user_org_id()); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY ab_tests_service_role_bypass ON ab_tests FOR ALL TO service_role USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS ab_test_id UUID REFERENCES ab_tests(id) ON DELETE SET NULL;
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS ab_variant_label TEXT;
+`;
+
 const MIGRATIONS = [
-  { name: '001_initial_schema', sql: SQL_001 },
-  { name: '002_rls_policies',   sql: SQL_002 },
-  { name: '003_indexes',        sql: SQL_003 },
-  { name: '004_org_timezone',   sql: SQL_004 },
+  { name: '001_initial_schema',     sql: SQL_001 },
+  { name: '002_rls_policies',       sql: SQL_002 },
+  { name: '003_indexes',            sql: SQL_003 },
+  { name: '004_org_timezone',       sql: SQL_004 },
   { name: '005_campaign_templates', sql: SQL_005 },
+  { name: '006_ab_tests',           sql: SQL_006 },
 ];
 
 export async function runMigrations(): Promise<void> {

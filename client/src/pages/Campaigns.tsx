@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Plus, Play, Pause, BarChart2, Loader2, X, Megaphone, Mail, Send,
   CheckCircle2, Eye, MousePointerClick, AlertCircle, Copy, Bookmark, LayoutTemplate,
+  FlaskConical, Trophy,
 } from 'lucide-react';
 import api from '../lib/api';
 import { ToastContainer, useToast } from '../components/Toast';
@@ -14,6 +15,7 @@ interface Campaign {
   id: string; name: string; description?: string; channel: string; status: string;
   segment_id?: string; message_body?: string; template_name?: string; subject?: string;
   scheduled_at?: string; created_at: string; is_template?: boolean;
+  ab_test_id?: string | null; ab_variant_label?: string | null;
 }
 interface CampaignsResponse { data: Campaign[]; total?: number; }
 interface Segment { id: string; name: string; }
@@ -283,6 +285,258 @@ function TemplateCard({
   );
 }
 
+// ─── A/B Test Modal ───────────────────────────────────────────────────────────
+
+interface ABTestStats {
+  total: number; sent: number; delivered: number; read: number;
+  opened: number; clicked: number; failed: number; bounced: number;
+  openRate: number; clickRate: number; deliveryRate: number;
+}
+interface ABTestData {
+  test: { id: string; name: string; split_percent: number; status: string; winner_campaign_id?: string };
+  variantA: Campaign; variantB: Campaign;
+  statsA: ABTestStats | null; statsB: ABTestStats | null;
+}
+
+function ABCompareBar({ label, a, b, total }: { label: string; a: number; b: number; total: number; color?: string }) {
+  const pctA = total > 0 ? Math.round((a / total) * 100) : 0;
+  const pctB = total > 0 ? Math.round((b / total) * 100) : 0;
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>
+        <span>{label}</span>
+        <div style={{ display: 'flex', gap: 16 }}>
+          <span style={{ color: '#818cf8' }}>{a} <span style={{ opacity: 0.5 }}>({pctA}%)</span></span>
+          <span style={{ color: '#f59e0b' }}>{b} <span style={{ opacity: 0.5 }}>({pctB}%)</span></span>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 4, height: 6, borderRadius: 4, overflow: 'hidden', background: 'rgba(255,255,255,0.05)' }}>
+        <div style={{ width: `${pctA}%`, background: '#818cf8', transition: 'width 0.6s ease', borderRadius: 4 }} />
+        <div style={{ width: `${pctB}%`, background: '#f59e0b', transition: 'width 0.6s ease', borderRadius: 4 }} />
+      </div>
+    </div>
+  );
+}
+
+function ABTestModal({ testId, onClose, onWinnerDeclared }: { testId: string; onClose: () => void; onWinnerDeclared: () => void }) {
+  const qc = useQueryClient();
+  const { addToast } = useToast();
+  const { data, isLoading } = useQuery<ABTestData>({
+    queryKey: ['ab-test', testId],
+    queryFn: () => api.get(`/ab-tests/${testId}`).then(r => r.data),
+  });
+
+  const declareWinnerMutation = useMutation({
+    mutationFn: (winnerId: string) => api.post(`/ab-tests/${testId}/declare-winner`, { winner_campaign_id: winnerId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['campaigns'] });
+      qc.invalidateQueries({ queryKey: ['ab-test', testId] });
+      addToast('success', 'Winner declared!');
+      onWinnerDeclared();
+    },
+    onError: () => addToast('error', 'Failed to declare winner.'),
+  });
+
+  const totalA = data?.statsA?.total ?? 0;
+  const totalB = data?.statsB?.total ?? 0;
+  const maxTotal = Math.max(totalA, totalB, 1);
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="glass animate-slide-up" style={{ width: '100%', maxWidth: 600 }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <FlaskConical size={16} color="#818cf8" />
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>A/B Test Results</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', marginTop: 1 }}>{data?.test?.name ?? '…'}</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}><X size={17} /></button>
+        </div>
+
+        {isLoading ? (
+          <div style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 40 }} />)}
+          </div>
+        ) : !data ? null : (
+          <div style={{ padding: '22px 24px' }}>
+            {/* Legend */}
+            <div style={{ display: 'flex', gap: 20, marginBottom: 20 }}>
+              {[
+                { label: `Variant A — ${data.variantA?.name}`, color: '#818cf8', pct: data.test.split_percent },
+                { label: `Variant B — ${data.variantB?.name}`, color: '#f59e0b', pct: 100 - data.test.split_percent },
+              ].map(({ label, color, pct }) => (
+                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 2, background: color, flexShrink: 0 }} />
+                  {label} <span style={{ color: 'rgba(255,255,255,0.3)' }}>({pct}%)</span>
+                  {data.test.winner_campaign_id === (color === '#818cf8' ? data.variantA?.id : data.variantB?.id) && (
+                    <Trophy size={12} color="#fbbf24" />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Head-to-head stats */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+              {[
+                { label: 'Audience', a: totalA, b: totalB },
+                { label: 'Sent', a: (data.statsA?.sent ?? 0) + (data.statsA?.delivered ?? 0) + (data.statsA?.read ?? 0), b: (data.statsB?.sent ?? 0) + (data.statsB?.delivered ?? 0) + (data.statsB?.read ?? 0) },
+                { label: 'Open Rate', a: data.statsA?.openRate ?? 0, b: data.statsB?.openRate ?? 0, isRate: true },
+                { label: 'Click Rate', a: data.statsA?.clickRate ?? 0, b: data.statsB?.clickRate ?? 0, isRate: true },
+              ].map(({ label, a, b, isRate }) => (
+                <div key={label} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-around' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: '#818cf8', letterSpacing: '-0.03em' }}>{isRate ? `${a}%` : a}</div>
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>A</div>
+                    </div>
+                    <div style={{ width: 1, background: 'rgba(255,255,255,0.06)' }} />
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: '#f59e0b', letterSpacing: '-0.03em' }}>{isRate ? `${b}%` : b}</div>
+                      <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>B</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Comparison bars */}
+            <ABCompareBar label="Opens"  a={data.statsA?.opened ?? 0} b={data.statsB?.opened ?? 0} total={maxTotal} color="#818cf8" />
+            <ABCompareBar label="Clicks" a={data.statsA?.clicked ?? 0} b={data.statsB?.clicked ?? 0} total={maxTotal} color="#38bdf8" />
+            <ABCompareBar label="Failed" a={(data.statsA?.failed ?? 0) + (data.statsA?.bounced ?? 0)} b={(data.statsB?.failed ?? 0) + (data.statsB?.bounced ?? 0)} total={maxTotal} color="#f87171" />
+
+            {/* Declare winner */}
+            {data.test.status !== 'completed' && (
+              <div style={{ display: 'flex', gap: 10, marginTop: 20, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+                  <Trophy size={12} color="#fbbf24" /> Declare the winning variant:
+                </div>
+                <button onClick={() => declareWinnerMutation.mutate(data.variantA.id)} disabled={declareWinnerMutation.isPending} style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(129,140,248,0.12)', border: '1px solid rgba(129,140,248,0.3)', color: '#a5b4fc', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                  Variant A wins
+                </button>
+                <button onClick={() => declareWinnerMutation.mutate(data.variantB.id)} disabled={declareWinnerMutation.isPending} style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', color: '#fbbf24', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                  Variant B wins
+                </button>
+              </div>
+            )}
+            {data.test.status === 'completed' && (
+              <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 8, background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.2)', fontSize: 12, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Trophy size={12} /> Test completed — winner declared.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── A/B Setup Modal ──────────────────────────────────────────────────────────
+
+function ABSetupModal({ campaign, onClose, onCreated }: { campaign: Campaign; onClose: () => void; onCreated: () => void }) {
+  const { addToast } = useToast();
+  const [splitPercent, setSplitPercent] = useState(50);
+  const [variantBBody, setVariantBBody] = useState(campaign.message_body ?? '');
+  const [variantBSubject, setVariantBSubject] = useState(campaign.subject ?? '');
+  const [variantBName, setVariantBName] = useState(`${campaign.name} — Variant B`);
+
+  const setupMutation = useMutation({
+    mutationFn: () => api.post(`/campaigns/${campaign.id}/ab-test`, {
+      split_percent: splitPercent,
+      variant_b: {
+        name: variantBName,
+        message_body: variantBBody || undefined,
+        subject: variantBSubject || undefined,
+      },
+    }),
+    onSuccess: () => {
+      addToast('success', 'A/B test created. Launch when ready.');
+      onCreated();
+    },
+    onError: (err: unknown) =>
+      addToast('error', (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? 'Failed to create A/B test.'),
+  });
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="glass animate-slide-up" style={{ width: '100%', maxWidth: 540 }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <FlaskConical size={16} color="#818cf8" />
+            <span style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>Set Up A/B Test</span>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}><X size={17} /></button>
+        </div>
+
+        <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {/* Variant A (read-only) */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#818cf8', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Variant A (original)</div>
+            <div style={{ background: 'rgba(129,140,248,0.06)', border: '1px solid rgba(129,140,248,0.15)', borderRadius: 8, padding: '10px 14px' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#fff', marginBottom: 4 }}>{campaign.name}</div>
+              {campaign.subject && <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Subject: {campaign.subject}</div>}
+              {campaign.message_body && (
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4, fontFamily: 'monospace' }}>
+                  {campaign.message_body.replace(/<[^>]+>/g, '').slice(0, 100)}{campaign.message_body.length > 100 ? '…' : ''}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Variant B */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Variant B (new)</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div>
+                <span className="chrome-label">Variant B Name</span>
+                <input type="text" value={variantBName} onChange={e => setVariantBName(e.target.value)} className="input-glass" />
+              </div>
+              {campaign.channel === 'email' && (
+                <div>
+                  <span className="chrome-label">Subject Line</span>
+                  <input type="text" value={variantBSubject} onChange={e => setVariantBSubject(e.target.value)} placeholder="Different subject to test…" className="input-glass" />
+                </div>
+              )}
+              <div>
+                <span className="chrome-label">Message Body</span>
+                <textarea value={variantBBody} onChange={e => setVariantBBody(e.target.value)} rows={3} placeholder="Different message body to test…" className="input-glass" style={{ resize: 'none' }} />
+              </div>
+            </div>
+          </div>
+
+          {/* Split slider */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <span className="chrome-label" style={{ marginBottom: 0 }}>Audience Split</span>
+              <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
+                <span style={{ color: '#818cf8', fontWeight: 600 }}>{splitPercent}% A</span>
+                {' / '}
+                <span style={{ color: '#f59e0b', fontWeight: 600 }}>{100 - splitPercent}% B</span>
+              </span>
+            </div>
+            <div style={{ position: 'relative', height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.06)', overflow: 'hidden', marginBottom: 4 }}>
+              <div style={{ position: 'absolute', left: 0, top: 0, height: '100%', width: `${splitPercent}%`, background: 'linear-gradient(90deg, #818cf8, #a5b4fc)', transition: 'width 0.1s' }} />
+              <div style={{ position: 'absolute', right: 0, top: 0, height: '100%', width: `${100 - splitPercent}%`, background: 'linear-gradient(90deg, #fbbf24, #f59e0b)' }} />
+            </div>
+            <input type="range" min={10} max={90} step={5} value={splitPercent} onChange={e => setSplitPercent(Number(e.target.value))}
+              style={{ width: '100%', accentColor: '#818cf8', cursor: 'pointer' }} />
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, paddingTop: 4 }}>
+            <button type="button" onClick={onClose} className="btn-glass" style={{ flex: 1, padding: '11px', borderRadius: 9, fontSize: 13, fontWeight: 600 }}>Cancel</button>
+            <button onClick={() => setupMutation.mutate()} disabled={setupMutation.isPending} className="btn-chrome" style={{ flex: 1, padding: '11px', borderRadius: 9, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              {setupMutation.isPending && <Loader2 size={13} className="animate-spin-slow" />}
+              <FlaskConical size={13} /> Create A/B Test
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function Campaigns() {
@@ -293,6 +547,8 @@ export default function Campaigns() {
   const [activeTab, setActiveTab] = useState<'campaigns' | 'templates'>('campaigns');
   const [showModal, setShowModal] = useState(false);
   const [analyticsId, setAnalyticsId] = useState<{ id: string; name: string } | null>(null);
+  const [abSetupCampaign, setAbSetupCampaign] = useState<Campaign | null>(null);
+  const [abTestId, setAbTestId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(defaultForm);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
@@ -471,9 +727,19 @@ export default function Campaigns() {
                   </tr>
                 </thead>
                 <tbody>
-                  {campaigns.map(c => (
+                  {campaigns.map(c => {
+                    const isABVariant = !!c.ab_test_id;
+                    const isVariantA = c.ab_variant_label === 'A';
+                    const isVariantB = c.ab_variant_label === 'B';
+                    return (
                     <tr key={c.id}>
-                      <td style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 500 }}>{c.name}</td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 500 }}>{c.name}</span>
+                          {isVariantA && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(129,140,248,0.15)', color: '#818cf8', fontWeight: 800, letterSpacing: '0.06em' }}>A</span>}
+                          {isVariantB && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 4, background: 'rgba(245,158,11,0.15)', color: '#f59e0b', fontWeight: 800, letterSpacing: '0.06em' }}>B</span>}
+                        </div>
+                      </td>
                       <td>
                         <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 5, background: channelColors[c.channel]?.bg ?? 'rgba(255,255,255,0.06)', color: channelColors[c.channel]?.text ?? 'rgba(255,255,255,0.4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                           {c.channel}
@@ -485,18 +751,32 @@ export default function Campaigns() {
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5 }}>
                           {['draft','scheduled','paused'].includes(c.status) && (
-                            <button onClick={() => launchMutation.mutate(c.id)} disabled={launchMutation.isPending} style={{ padding: '5px 12px', borderRadius: 7, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', color: '#4ade80', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600 }}>
-                              <Play size={11} /> Launch
+                            <button onClick={() => launchMutation.mutate(c.id)} disabled={launchMutation.isPending} style={{ padding: '5px 12px', borderRadius: 7, background: isVariantA ? 'rgba(129,140,248,0.1)' : 'rgba(34,197,94,0.08)', border: `1px solid ${isVariantA ? 'rgba(129,140,248,0.25)' : 'rgba(34,197,94,0.2)'}`, color: isVariantA ? '#a5b4fc' : '#4ade80', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600 }}>
+                              {isVariantA ? <><FlaskConical size={10} /> Launch A/B</> : <><Play size={11} /> Launch</>}
                             </button>
                           )}
+                          {/* Hide launch for Variant B — it's launched via Variant A */}
+                          {isVariantB && ['draft','scheduled','paused'].includes(c.status) && null}
                           {c.status === 'running' && (
                             <button onClick={() => pauseMutation.mutate(c.id)} disabled={pauseMutation.isPending} style={{ padding: '5px 12px', borderRadius: 7, background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', color: '#fbbf24', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600 }}>
                               <Pause size={11} /> Pause
                             </button>
                           )}
-                          <button onClick={() => cloneMutation.mutate(c.id)} disabled={cloneMutation.isPending} title="Clone" style={{ padding: '5px 8px', borderRadius: 7, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}>
-                            <Copy size={12} />
-                          </button>
+                          {!isABVariant && (
+                            <button onClick={() => setAbSetupCampaign(c)} title="Set up A/B test" style={{ padding: '5px 8px', borderRadius: 7, background: 'rgba(129,140,248,0.06)', border: '1px solid rgba(129,140,248,0.15)', color: 'rgba(129,140,248,0.7)', cursor: 'pointer' }}>
+                              <FlaskConical size={12} />
+                            </button>
+                          )}
+                          {isABVariant && (
+                            <button onClick={() => setAbTestId(c.ab_test_id!)} title="View A/B test results" style={{ padding: '5px 8px', borderRadius: 7, background: 'rgba(129,140,248,0.06)', border: '1px solid rgba(129,140,248,0.15)', color: 'rgba(129,140,248,0.7)', cursor: 'pointer' }}>
+                              <FlaskConical size={12} />
+                            </button>
+                          )}
+                          {!isVariantB && (
+                            <button onClick={() => cloneMutation.mutate(c.id)} disabled={cloneMutation.isPending} title="Clone" style={{ padding: '5px 8px', borderRadius: 7, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}>
+                              <Copy size={12} />
+                            </button>
+                          )}
                           <button onClick={() => saveAsTemplateMutation.mutate(c.id)} disabled={saveAsTemplateMutation.isPending} title="Save as template" style={{ padding: '5px 8px', borderRadius: 7, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}>
                             <Bookmark size={12} />
                           </button>
@@ -506,7 +786,8 @@ export default function Campaigns() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -630,6 +911,22 @@ export default function Campaigns() {
 
       {analyticsId && (
         <AnalyticsModal campaignId={analyticsId.id} campaignName={analyticsId.name} onClose={() => setAnalyticsId(null)} />
+      )}
+
+      {abSetupCampaign && (
+        <ABSetupModal
+          campaign={abSetupCampaign}
+          onClose={() => setAbSetupCampaign(null)}
+          onCreated={() => { setAbSetupCampaign(null); qc.invalidateQueries({ queryKey: ['campaigns'] }); }}
+        />
+      )}
+
+      {abTestId && (
+        <ABTestModal
+          testId={abTestId}
+          onClose={() => setAbTestId(null)}
+          onWinnerDeclared={() => setAbTestId(null)}
+        />
       )}
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />

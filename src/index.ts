@@ -19,6 +19,7 @@ import messageRoutes from './routes/messages.routes';
 import webhookRoutes from './routes/webhooks.routes';
 import segmentRoutes from './routes/segments.routes';
 import trackingRoutes from './routes/tracking.routes';
+import abTestRoutes from './routes/ab-tests.routes';
 
 const app = express();
 
@@ -68,6 +69,8 @@ app.use('/api/v1/mandates', mandateRoutes);
 app.use('/api/v1/contacts', contactRoutes);
 app.use('/api/v1/segments', segmentRoutes);
 app.use('/api/v1/messages', messageRoutes);
+app.use('/api/v1/ab-tests', abTestRoutes);
+app.use('/api/v1', abTestRoutes); // also handles /campaigns/:id/ab-test sub-route
 
 // ─── Serve React Client ──────────────────────────────────────────────────────
 const clientDist = path.join(__dirname, '../client/dist');

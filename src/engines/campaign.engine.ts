@@ -20,6 +20,8 @@ interface Campaign {
   scheduled_at: string | null;
   metadata: Record<string, unknown>;
   created_by: string | null;
+  ab_test_id: string | null;
+  ab_variant_label: string | null;
 }
 
 interface Contact {
@@ -50,7 +52,12 @@ class CampaignEngine {
       throw new Error(`Campaign cannot be launched from status: ${c.status}`);
     }
 
-    // Mark as running
+    // If this is variant A of an A/B test, launch the full test instead
+    if (c.ab_test_id && c.ab_variant_label === 'A') {
+      const result = await this.launchABTest(c.ab_test_id, userId);
+      return { enqueued: result.enqueuedA + result.enqueuedB };
+    }
+
     await supabase
       .from('campaigns')
       .update({ status: 'running', launched_at: new Date().toISOString() })
@@ -58,47 +65,130 @@ class CampaignEngine {
 
     logger.info('Campaign launching', { campaignId, channel: c.channel });
 
-    // Resolve audience
-    let contacts: Contact[] = [];
-    if (c.segment_id) {
-      contacts = await segmentService.resolveSegment(c.org_id, c.segment_id);
+    const contacts = await this.resolveAudience(c.org_id, c.segment_id, c.channel);
+    const enqueued = await this.createMessagesForContacts(c, contacts);
+
+    logger.info('Campaign messages enqueued', { campaignId, enqueued });
+
+    await auditService.log(c.org_id, userId ?? null, 'campaign.launched', 'campaign', campaignId, {
+      enqueued,
+    });
+
+    return { enqueued };
+  }
+
+  async launchABTest(
+    abTestId: string,
+    userId?: string,
+  ): Promise<{ enqueuedA: number; enqueuedB: number }> {
+    const { data: test, error: testError } = await supabase
+      .from('ab_tests')
+      .select('*')
+      .eq('id', abTestId)
+      .single();
+
+    if (testError || !test) throw new Error(`A/B test not found: ${abTestId}`);
+
+    const { data: variants, error: varError } = await supabase
+      .from('campaigns')
+      .select('*')
+      .eq('ab_test_id', abTestId);
+
+    if (varError || !variants || variants.length < 2) {
+      throw new Error('A/B test must have exactly two variants');
+    }
+
+    const variantA = (variants as Campaign[]).find((v) => v.ab_variant_label === 'A');
+    const variantB = (variants as Campaign[]).find((v) => v.ab_variant_label === 'B');
+
+    if (!variantA || !variantB) throw new Error('Could not find both A/B variants');
+
+    if (!['draft', 'scheduled', 'paused'].includes(variantA.status)) {
+      throw new Error(`Variant A cannot be launched from status: ${variantA.status}`);
+    }
+
+    // Resolve full audience from variant A's config (segment + channel opt-outs)
+    const allContacts = await this.resolveAudience(variantA.org_id, variantA.segment_id, variantA.channel);
+
+    // Shuffle for random split, then divide by split_percent
+    const shuffled = this.shuffle(allContacts);
+    const splitIdx = Math.max(1, Math.floor(shuffled.length * (test.split_percent as number) / 100));
+    const contactsA = shuffled.slice(0, splitIdx);
+    const contactsB = shuffled.slice(splitIdx);
+
+    const now = new Date().toISOString();
+    await supabase.from('campaigns').update({ status: 'running', launched_at: now }).eq('id', variantA.id);
+    await supabase.from('campaigns').update({ status: 'running', launched_at: now }).eq('id', variantB.id);
+    await supabase.from('ab_tests').update({ status: 'running' }).eq('id', abTestId);
+
+    const [enqueuedA, enqueuedB] = await Promise.all([
+      this.createMessagesForContacts(variantA, contactsA),
+      this.createMessagesForContacts(variantB, contactsB),
+    ]);
+
+    logger.info('A/B test launched', { abTestId, enqueuedA, enqueuedB });
+
+    await auditService.log(variantA.org_id, userId ?? null, 'campaign.launched', 'campaign', abTestId, {
+      ab_test: true, enqueuedA, enqueuedB,
+    });
+
+    return { enqueuedA, enqueuedB };
+  }
+
+  async pause(campaignId: string, userId?: string): Promise<void> {
+    const { data: campaign, error } = await supabase
+      .from('campaigns')
+      .select('id, org_id, status')
+      .eq('id', campaignId)
+      .single();
+
+    if (error || !campaign) throw new Error(`Campaign not found: ${campaignId}`);
+
+    if (campaign.status !== 'running') {
+      throw new Error(`Campaign is not running (status: ${campaign.status})`);
+    }
+
+    await supabase.from('campaigns').update({ status: 'paused' }).eq('id', campaignId);
+
+    await auditService.log(campaign.org_id as string, userId ?? null, 'campaign.paused', 'campaign', campaignId, {});
+    logger.info('Campaign paused', { campaignId });
+  }
+
+  // ─── Shared helpers ──────────────────────────────────────────────────────
+
+  async resolveAudience(orgId: string, segmentId: string | null, channel: ChannelType): Promise<Contact[]> {
+    let contacts: Contact[];
+
+    if (segmentId) {
+      contacts = await segmentService.resolveSegment(orgId, segmentId);
     } else {
-      // All contacts in the org
       const { data } = await supabase
         .from('contacts')
         .select('id, phone, email, whatsapp_id, name, custom_fields, opt_out_channels')
-        .eq('org_id', c.org_id);
+        .eq('org_id', orgId);
       contacts = (data as Contact[]) ?? [];
     }
 
-    // Filter opted-out contacts
-    const eligible = contacts.filter(
-      (contact) => !contact.opt_out_channels?.includes(c.channel),
-    );
+    return contacts.filter((c) => !c.opt_out_channels?.includes(channel));
+  }
 
-    logger.info('Campaign audience resolved', {
-      campaignId,
-      total: contacts.length,
-      eligible: eligible.length,
-    });
-
+  async createMessagesForContacts(campaign: Campaign, contacts: Contact[]): Promise<number> {
     let enqueued = 0;
 
-    // Create campaign messages
-    for (const contact of eligible) {
-      const recipientId = this.getRecipientId(c.channel, contact);
+    for (const contact of contacts) {
+      const recipientId = this.getRecipientId(campaign.channel, contact);
       if (!recipientId) continue;
 
-      const templateVars = this.interpolateVariables(c.template_vars, contact);
-      const scheduledAt = c.scheduled_at
-        ? this.calculateScheduledAt(c.scheduled_at, enqueued)
+      const templateVars = this.interpolateVariables(campaign.template_vars ?? {}, contact);
+      const scheduledAt = campaign.scheduled_at
+        ? this.calculateScheduledAt(campaign.scheduled_at, enqueued)
         : null;
 
       const { error } = await supabase.from('campaign_messages').insert({
-        campaign_id: campaignId,
+        campaign_id: campaign.id,
         contact_id: contact.id,
-        org_id: c.org_id,
-        channel: c.channel,
+        org_id: campaign.org_id,
+        channel: campaign.channel,
         recipient_id: recipientId,
         template_vars: templateVars,
         status: 'pending',
@@ -109,80 +199,30 @@ class CampaignEngine {
         enqueued++;
       } else {
         logger.warn('Failed to create campaign message', {
-          campaignId,
+          campaignId: campaign.id,
           contactId: contact.id,
           error: error.message,
         });
       }
     }
 
-    logger.info('Campaign messages enqueued', { campaignId, enqueued });
-
-    await auditService.log(
-      c.org_id,
-      userId ?? null,
-      'campaign.launched',
-      'campaign',
-      campaignId,
-      { enqueued, total: contacts.length, eligible: eligible.length },
-    );
-
-    return { enqueued };
-  }
-
-  async pause(campaignId: string, userId?: string): Promise<void> {
-    const { data: campaign, error } = await supabase
-      .from('campaigns')
-      .select('id, org_id, status')
-      .eq('id', campaignId)
-      .single();
-
-    if (error || !campaign) {
-      throw new Error(`Campaign not found: ${campaignId}`);
-    }
-
-    if (campaign.status !== 'running') {
-      throw new Error(`Campaign is not running (status: ${campaign.status})`);
-    }
-
-    await supabase
-      .from('campaigns')
-      .update({ status: 'paused' })
-      .eq('id', campaignId);
-
-    await auditService.log(
-      campaign.org_id as string,
-      userId ?? null,
-      'campaign.paused',
-      'campaign',
-      campaignId,
-      {},
-    );
-
-    logger.info('Campaign paused', { campaignId });
+    return enqueued;
   }
 
   getRecipientId(channel: ChannelType, contact: Contact): string | null {
     switch (channel) {
-      case 'whatsapp':
-        return contact.whatsapp_id ?? contact.phone ?? null;
-      case 'sms':
-        return contact.phone ?? null;
-      case 'email':
-        return contact.email ?? null;
-      default:
-        return null;
+      case 'whatsapp': return contact.whatsapp_id ?? contact.phone ?? null;
+      case 'sms':      return contact.phone ?? null;
+      case 'email':    return contact.email ?? null;
+      default:         return null;
     }
   }
 
-  interpolateVariables(
-    templateVars: Record<string, string>,
-    contact: Contact,
-  ): Record<string, string> {
+  interpolateVariables(templateVars: Record<string, string>, contact: Contact): Record<string, string> {
     const contactFields: Record<string, string> = {
-      name: contact.name ?? '',
-      phone: contact.phone ?? '',
-      email: contact.email ?? '',
+      name:       contact.name ?? '',
+      phone:      contact.phone ?? '',
+      email:      contact.email ?? '',
       first_name: (contact.name ?? '').split(' ')[0] ?? '',
       ...Object.fromEntries(
         Object.entries(contact.custom_fields ?? {}).map(([k, v]) => [k, String(v)]),
@@ -199,10 +239,18 @@ class CampaignEngine {
   }
 
   calculateScheduledAt(baseScheduledAt: string, offset: number): string {
-    // Stagger messages: send up to 60 per minute (1 per second spread)
     const base = new Date(baseScheduledAt).getTime();
     const staggerMs = Math.floor(offset / 60) * 60_000 + (offset % 60) * 1000;
     return new Date(base + staggerMs).toISOString();
+  }
+
+  private shuffle<T>(arr: T[]): T[] {
+    const shuffled = [...arr];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
   }
 }
 
