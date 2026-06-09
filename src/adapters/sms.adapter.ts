@@ -4,11 +4,11 @@ import { logger } from '../lib/logger';
 let atInstance: ReturnType<typeof AfricasTalking> | null = null;
 
 function getATInstance(): ReturnType<typeof AfricasTalking> {
-  const apiKey = process.env.AT_API_KEY;
-  const username = process.env.AT_USERNAME;
+  const apiKey = process.env.AFRICASTALKING_API_KEY;
+  const username = process.env.AFRICASTALKING_USERNAME;
 
   if (!apiKey || !username) {
-    throw new Error("Missing Africa's Talking credentials: AT_API_KEY and AT_USERNAME are required");
+    throw new Error("Missing Africa's Talking credentials: AFRICASTALKING_API_KEY and AFRICASTALKING_USERNAME are required");
   }
 
   // Re-create instance if credentials changed
@@ -50,7 +50,7 @@ export async function sendSMS(
 ): Promise<SMSResult> {
   const at = getATInstance();
   const sms = at.SMS;
-  const from = senderId ?? process.env.AT_SENDER_ID ?? 'AFRICASTKNG';
+  const from = senderId ?? process.env.AFRICASTALKING_SENDER_ID ?? 'AFRICASTKNG';
 
   try {
     const response = await sms.send({
@@ -94,7 +94,7 @@ export async function sendBulkSMS(
 ): Promise<BulkSMSResult> {
   const at = getATInstance();
   const sms = at.SMS;
-  const from = senderId ?? process.env.AT_SENDER_ID ?? 'AFRICASTKNG';
+  const from = senderId ?? process.env.AFRICASTALKING_SENDER_ID ?? 'AFRICASTKNG';
 
   const chunks = chunkArray(recipients, batchSize);
   const allResults: SMSResult[] = [];
