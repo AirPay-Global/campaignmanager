@@ -60,21 +60,17 @@ export async function sendSMS(
     });
 
     const recipient = response.SMSMessageData?.Recipients?.[0];
+    const atStatus = recipient?.status ?? response.SMSMessageData?.Message ?? 'No response from AT';
     const status = recipient?.status === 'Success' ? 'sent' : 'failed';
 
-    logger.info('SMS sent', {
-      phone,
-      messageId: recipient?.messageId,
-      status: recipient?.status,
-      cost: recipient?.cost,
-    });
+    logger.info('SMS response', { phone, status: atStatus, cost: recipient?.cost, full: JSON.stringify(response) });
 
     return {
       phone,
       status,
       messageId: recipient?.messageId,
       cost: recipient?.cost,
-      error: status === 'failed' ? recipient?.status : undefined,
+      error: status === 'failed' ? atStatus : undefined,
     };
   } catch (err: unknown) {
     const error = err as { response?: { data?: unknown; status?: number }; message?: string };
