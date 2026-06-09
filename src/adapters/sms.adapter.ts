@@ -50,13 +50,13 @@ export async function sendSMS(
 ): Promise<SMSResult> {
   const at = getATInstance();
   const sms = at.SMS;
-  const from = senderId ?? process.env.AFRICASTALKING_SENDER_ID ?? 'AFRICASTKNG';
+  const from = senderId ?? process.env.AFRICASTALKING_SENDER_ID ?? undefined;
 
   try {
     const response = await sms.send({
       to: phone,
       message,
-      from,
+      ...(from ? { from } : {}),
     });
 
     const recipient = response.SMSMessageData?.Recipients?.[0];
@@ -90,7 +90,7 @@ export async function sendBulkSMS(
 ): Promise<BulkSMSResult> {
   const at = getATInstance();
   const sms = at.SMS;
-  const from = senderId ?? process.env.AFRICASTALKING_SENDER_ID ?? 'AFRICASTKNG';
+  const from = senderId ?? process.env.AFRICASTALKING_SENDER_ID ?? undefined;
 
   const chunks = chunkArray(recipients, batchSize);
   const allResults: SMSResult[] = [];
@@ -110,7 +110,7 @@ export async function sendBulkSMS(
         const response = await sms.send({
           to: phones,
           message,
-          from,
+          ...(from ? { from } : {}),
         });
 
         const apiRecipients = response.SMSMessageData?.Recipients ?? [];
