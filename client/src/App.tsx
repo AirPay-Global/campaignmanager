@@ -10,6 +10,7 @@ import Messages from './pages/Messages';
 import InboxPage from './pages/Inbox';
 import Segments from './pages/Segments';
 import CampaignBuilder from './pages/CampaignBuilder';
+import Workflows from './pages/Workflows';
 import Layout from './components/Layout';
 
 const queryClient = new QueryClient({
@@ -101,6 +102,16 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <InboxPage />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/workflows"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Workflows />
                 </Layout>
               </ProtectedRoute>
             }

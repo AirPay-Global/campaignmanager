@@ -7,6 +7,7 @@ import { logger } from './lib/logger';
 import { runMigrations } from './lib/migrate';
 import { apiRateLimiter } from './middleware/rate-limit.middleware';
 import { processQueue } from './engines/queue.engine';
+import { processEnrollments } from './engines/workflow.engine';
 
 // Routes
 import authRoutes from './routes/auth.routes';
@@ -20,6 +21,7 @@ import webhookRoutes from './routes/webhooks.routes';
 import segmentRoutes from './routes/segments.routes';
 import trackingRoutes from './routes/tracking.routes';
 import abTestRoutes from './routes/ab-tests.routes';
+import workflowRoutes from './routes/workflows.routes';
 
 const app = express();
 
@@ -71,6 +73,7 @@ app.use('/api/v1/segments', segmentRoutes);
 app.use('/api/v1/messages', messageRoutes);
 app.use('/api/v1/ab-tests', abTestRoutes);
 app.use('/api/v1', abTestRoutes); // also handles /campaigns/:id/ab-test sub-route
+app.use('/api/v1/workflows', workflowRoutes);
 
 // ─── Serve React Client ──────────────────────────────────────────────────────
 const clientDist = path.join(__dirname, '../client/dist');
@@ -111,6 +114,16 @@ if (process.env.RUN_QUEUE_WORKER !== 'false') {
     }
   });
   logger.info('Queue worker started (every 10 seconds)');
+
+  cron.schedule('*/30 * * * * *', async () => {
+    try {
+      await processEnrollments();
+    } catch (err: unknown) {
+      const error = err as Error;
+      logger.error('Workflow enrollment processing error', { error: error.message });
+    }
+  });
+  logger.info('Workflow engine started (every 30 seconds)');
 }
 
 // ─── Start Server ────────────────────────────────────────────────────────────

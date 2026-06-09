@@ -312,6 +312,67 @@ ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS ab_test_id UUID REFERENCES ab_tes
 ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS ab_variant_label TEXT;
 `;
 
+const SQL_007 = `
+CREATE TABLE IF NOT EXISTS workflows (
+  id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  org_id         UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name           TEXT NOT NULL,
+  description    TEXT,
+  trigger_type   TEXT NOT NULL DEFAULT 'manual',
+  trigger_config JSONB NOT NULL DEFAULT '{}',
+  is_active      BOOLEAN NOT NULL DEFAULT FALSE,
+  created_by     UUID,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS workflow_steps (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  workflow_id   UUID NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+  org_id        UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  step_order    INT NOT NULL,
+  action_type   TEXT NOT NULL,
+  action_config JSONB NOT NULL DEFAULT '{}',
+  delay_hours   NUMERIC NOT NULL DEFAULT 0,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (workflow_id, step_order)
+);
+
+CREATE TABLE IF NOT EXISTS workflow_enrollments (
+  id                 UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  workflow_id        UUID NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+  contact_id         UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+  org_id             UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  current_step_order INT NOT NULL DEFAULT 1,
+  status             TEXT NOT NULL DEFAULT 'active',
+  next_step_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  enrolled_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at       TIMESTAMPTZ,
+  error_message      TEXT,
+  UNIQUE (workflow_id, contact_id)
+);
+
+DO $$ BEGIN
+  CREATE TRIGGER trg_workflows_updated_at
+    BEFORE UPDATE ON workflows FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER TABLE workflows            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workflow_steps       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE workflow_enrollments ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN CREATE POLICY workflows_org ON workflows FOR ALL TO authenticated USING (org_id = get_user_org_id()); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY workflows_sr  ON workflows FOR ALL TO service_role  USING (true) WITH CHECK (true);    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY workflow_steps_org ON workflow_steps FOR ALL TO authenticated USING (org_id = get_user_org_id()); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY workflow_steps_sr  ON workflow_steps FOR ALL TO service_role  USING (true) WITH CHECK (true);    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY workflow_enrollments_org ON workflow_enrollments FOR ALL TO authenticated USING (org_id = get_user_org_id()); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY workflow_enrollments_sr  ON workflow_enrollments FOR ALL TO service_role  USING (true) WITH CHECK (true);    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE INDEX IF NOT EXISTS idx_workflow_enrollments_due      ON workflow_enrollments (next_step_at) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_workflow_enrollments_workflow ON workflow_enrollments (workflow_id, status);
+CREATE INDEX IF NOT EXISTS idx_workflow_steps_workflow       ON workflow_steps (workflow_id, step_order);
+`;
+
 const MIGRATIONS = [
   { name: '001_initial_schema',     sql: SQL_001 },
   { name: '002_rls_policies',       sql: SQL_002 },
@@ -319,6 +380,7 @@ const MIGRATIONS = [
   { name: '004_org_timezone',       sql: SQL_004 },
   { name: '005_campaign_templates', sql: SQL_005 },
   { name: '006_ab_tests',           sql: SQL_006 },
+  { name: '007_workflows',          sql: SQL_007 },
 ];
 
 export async function runMigrations(): Promise<void> {

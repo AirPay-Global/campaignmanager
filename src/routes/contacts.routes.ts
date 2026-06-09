@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { contactService } from '../services/contact.service';
 import { auditService } from '../services/audit.service';
+import { tryEnrollByTrigger } from '../engines/workflow.engine';
 
 const router = Router();
 
@@ -72,6 +73,9 @@ router.post(
       phone: body.phone,
       email: body.email,
     });
+
+    // Fire workflow trigger (non-blocking)
+    tryEnrollByTrigger(contact.id, orgId, 'contact_created').catch(() => {});
 
     res.status(201).json(contact);
   }),
