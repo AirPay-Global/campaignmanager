@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Play, Pause, BarChart2, Loader2, X, Megaphone } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Play, Pause, BarChart2, Loader2, X, Megaphone, Mail } from 'lucide-react';
 import api from '../lib/api';
 import { ToastContainer, useToast } from '../components/Toast';
 
@@ -68,6 +69,7 @@ function Label({ children }: { children: React.ReactNode }) {
 
 export default function Campaigns() {
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { toasts, addToast, dismissToast } = useToast();
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<FormState>(defaultForm);
@@ -154,13 +156,22 @@ export default function Campaigns() {
             <h1 style={{ fontSize: 30, fontWeight: 800, color: '#fff', letterSpacing: '-0.04em', margin: 0 }}>Campaigns</h1>
             <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>Manage your messaging campaigns</p>
           </div>
-          <button
-            className="btn-chrome"
-            onClick={() => { setShowModal(true); setForm(defaultForm); setFormErrors({}); }}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 10, fontSize: 13 }}
-          >
-            <Plus size={15} /> New Campaign
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              className="btn-glass"
+              onClick={() => navigate('/campaigns/builder')}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600 }}
+            >
+              <Mail size={14} /> Email Builder
+            </button>
+            <button
+              className="btn-chrome"
+              onClick={() => { setShowModal(true); setForm(defaultForm); setFormErrors({}); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 10, fontSize: 13 }}
+            >
+              <Plus size={15} /> New Campaign
+            </button>
+          </div>
         </div>
 
         <div className="glass animate-fade-in-up stagger-2" style={{ overflow: 'hidden' }}>
