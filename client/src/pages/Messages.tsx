@@ -82,7 +82,7 @@ export default function Messages() {
   const buildPayload = (extra: object) => {
     if (msgType === 'template') {
       const vars = templateVars.reduce<Record<string, string>>((acc, v) => { if (v.key) acc[v.key] = v.value; return acc; }, {});
-      return { channel, template_name: templateName, template_vars: Object.keys(vars).length ? vars : undefined, ...extra };
+      return { channel, template_name: templateName, language_code: langCode, template_vars: Object.keys(vars).length ? vars : undefined, ...extra };
     }
     return { channel, body, ...(subject ? { subject } : {}), ...extra };
   };

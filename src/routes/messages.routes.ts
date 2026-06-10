@@ -133,6 +133,7 @@ router.post(
       subject?: string;
       template_name?: string;
       template_vars?: Record<string, unknown>;
+      language_code?: string;
       scheduled_at?: string;
     };
 
@@ -161,6 +162,7 @@ router.post(
           subject: body.subject,
           templateName: body.template_name,
           templateVars: body.template_vars,
+          languageCode: body.language_code,
           contactId: r.contact_id,
           scheduledAt: body.scheduled_at,
         });
@@ -188,6 +190,7 @@ router.post(
       subject?: string;
       template_name?: string;
       template_vars?: Record<string, unknown>;
+      language_code?: string;
       contact_id?: string;
       scheduled_at?: string;
     };
@@ -225,6 +228,7 @@ router.post(
       subject: body.subject,
       templateName: body.template_name,
       templateVars: body.template_vars,
+      languageCode: body.language_code,
       contactId: body.contact_id,
       scheduledAt: body.scheduled_at,
     });

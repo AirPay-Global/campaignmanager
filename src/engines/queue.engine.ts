@@ -62,12 +62,18 @@ export async function enqueue(message: {
   subject?: string;
   templateName?: string;
   templateVars?: Record<string, unknown>;
+  languageCode?: string;
   contactId?: string;
   campaignId?: string;
   campaignMessageId?: string;
   inboundMessageId?: string;
   scheduledAt?: string;
 }): Promise<string> {
+  // Store language_code inside template_vars under a reserved key so no schema change is needed
+  const templateVars = message.languageCode
+    ? { ...message.templateVars, __lang: message.languageCode }
+    : (message.templateVars ?? {});
+
   const { data, error } = await supabase
     .from('outbound_messages')
     .insert({
@@ -77,7 +83,7 @@ export async function enqueue(message: {
       body: message.body ?? null,
       subject: message.subject ?? null,
       template_name: message.templateName ?? null,
-      template_vars: message.templateVars ?? {},
+      template_vars: templateVars,
       contact_id: message.contactId ?? null,
       campaign_id: message.campaignId ?? null,
       campaign_message_id: message.campaignMessageId ?? null,
@@ -222,11 +228,13 @@ export async function processMessage(message: OutboundMessage): Promise<void> {
     switch (message.channel) {
       case 'whatsapp': {
         if (message.template_name) {
-          // Template message
-          const components = buildWhatsAppComponents(message.template_vars);
+          // Template message — extract reserved __lang key before building components
+          const { __lang: langCode, ...varsWithoutLang } = message.template_vars as Record<string, unknown>;
+          const components = buildWhatsAppComponents(varsWithoutLang);
           const result = await sendWhatsAppTemplate({
             to: message.recipient_id,
             templateName: message.template_name,
+            languageCode: typeof langCode === 'string' ? langCode : undefined,
             components,
           });
           externalId = result.messages?.[0]?.id;
@@ -356,10 +364,9 @@ export async function processMessage(message: OutboundMessage): Promise<void> {
 function buildWhatsAppComponents(
   templateVars: Record<string, unknown>,
 ): WhatsAppTemplateComponent[] {
-  const bodyParams = Object.values(templateVars).map((v) => ({
-    type: 'text' as const,
-    text: String(v),
-  }));
+  const bodyParams = Object.keys(templateVars)
+    .sort((a, b) => Number(a) - Number(b))
+    .map((k) => ({ type: 'text' as const, text: String(templateVars[k]) }));
 
   if (bodyParams.length === 0) return [];
 
