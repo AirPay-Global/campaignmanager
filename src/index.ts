@@ -22,6 +22,7 @@ import segmentRoutes from './routes/segments.routes';
 import trackingRoutes from './routes/tracking.routes';
 import abTestRoutes from './routes/ab-tests.routes';
 import workflowRoutes from './routes/workflows.routes';
+import testRoutes from './routes/test.routes';
 
 const app = express();
 
@@ -74,6 +75,7 @@ app.use('/api/v1/messages', messageRoutes);
 app.use('/api/v1/ab-tests', abTestRoutes);
 app.use('/api/v1', abTestRoutes); // also handles /campaigns/:id/ab-test sub-route
 app.use('/api/v1/workflows', workflowRoutes);
+app.use('/api/v1/test', testRoutes);
 
 // ─── Serve React Client ──────────────────────────────────────────────────────
 const clientDist = path.join(__dirname, '../client/dist');
