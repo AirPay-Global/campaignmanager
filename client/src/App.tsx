@@ -16,6 +16,7 @@ import Attribution from './pages/Attribution';
 import FormPublic from './pages/FormPublic';
 import Ads from './pages/Ads';
 import Social from './pages/Social';
+import MessageTemplates from './pages/MessageTemplates';
 import Layout from './components/Layout';
 
 const queryClient = new QueryClient({
@@ -140,6 +141,16 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <Forms />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/templates"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <MessageTemplates />
                 </Layout>
               </ProtectedRoute>
             }

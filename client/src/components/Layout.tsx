@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Megaphone, Users, Shield, LogOut, Zap, Send, Inbox, Filter, GitBranch, ClipboardList, TrendingUp, Target, Share2 } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Users, Shield, LogOut, Zap, Send, Inbox, Filter, GitBranch, ClipboardList, TrendingUp, Target, Share2, FileText } from 'lucide-react';
 
 const navItems = [
   { to: '/dashboard',   label: 'Dashboard',   icon: LayoutDashboard },
@@ -8,6 +8,7 @@ const navItems = [
   { to: '/segments',    label: 'Segments',    icon: Filter },
   { to: '/workflows',   label: 'Workflows',   icon: GitBranch },
   { to: '/forms',       label: 'Forms',       icon: ClipboardList },
+  { to: '/templates',   label: 'Templates',   icon: FileText },
   { to: '/attribution', label: 'Attribution', icon: TrendingUp },
   { to: '/ads',         label: 'Ads',         icon: Target },
   { to: '/social',      label: 'Social',      icon: Share2 },

@@ -27,6 +27,7 @@ import formRoutes from './routes/forms.routes';
 import publicRoutes from './routes/public.routes';
 import adsRoutes from './routes/ads.routes';
 import socialRoutes from './routes/social.routes';
+import messageTemplateRoutes from './routes/message-templates.routes';
 import testRoutes from './routes/test.routes';
 
 const app = express();
@@ -86,6 +87,7 @@ app.use('/api/v1/workflows', workflowRoutes);
 app.use('/api/v1/forms', formRoutes);
 app.use('/api/v1/ads', adsRoutes);
 app.use('/api/v1/social', socialRoutes);
+app.use('/api/v1/message-templates', messageTemplateRoutes);
 app.use('/api/v1/test', testRoutes);
 
 // ─── Serve React Client ──────────────────────────────────────────────────────
