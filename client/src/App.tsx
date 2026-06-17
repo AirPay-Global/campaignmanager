@@ -15,6 +15,7 @@ import Forms from './pages/Forms';
 import Attribution from './pages/Attribution';
 import FormPublic from './pages/FormPublic';
 import Ads from './pages/Ads';
+import Social from './pages/Social';
 import Layout from './components/Layout';
 
 const queryClient = new QueryClient({
@@ -139,6 +140,16 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <Forms />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/social"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Social />
                 </Layout>
               </ProtectedRoute>
             }

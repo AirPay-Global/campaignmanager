@@ -8,6 +8,7 @@ import { runMigrations } from './lib/migrate';
 import { apiRateLimiter } from './middleware/rate-limit.middleware';
 import { processQueue } from './engines/queue.engine';
 import { processEnrollments } from './engines/workflow.engine';
+import { processScheduledPosts } from './engines/social.engine';
 
 // Routes
 import authRoutes from './routes/auth.routes';
@@ -25,6 +26,7 @@ import workflowRoutes from './routes/workflows.routes';
 import formRoutes from './routes/forms.routes';
 import publicRoutes from './routes/public.routes';
 import adsRoutes from './routes/ads.routes';
+import socialRoutes from './routes/social.routes';
 import testRoutes from './routes/test.routes';
 
 const app = express();
@@ -83,6 +85,7 @@ app.use('/api/v1', abTestRoutes); // also handles /campaigns/:id/ab-test sub-rou
 app.use('/api/v1/workflows', workflowRoutes);
 app.use('/api/v1/forms', formRoutes);
 app.use('/api/v1/ads', adsRoutes);
+app.use('/api/v1/social', socialRoutes);
 app.use('/api/v1/test', testRoutes);
 
 // ─── Serve React Client ──────────────────────────────────────────────────────
@@ -134,6 +137,16 @@ if (process.env.RUN_QUEUE_WORKER !== 'false') {
     }
   });
   logger.info('Workflow engine started (every 30 seconds)');
+
+  cron.schedule('* * * * *', async () => {
+    try {
+      await processScheduledPosts();
+    } catch (err: unknown) {
+      const error = err as Error;
+      logger.error('Social post scheduler error', { error: error.message });
+    }
+  });
+  logger.info('Social scheduler started (every 1 minute)');
 }
 
 // ─── Start Server ────────────────────────────────────────────────────────────
