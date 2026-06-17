@@ -373,6 +373,53 @@ CREATE INDEX IF NOT EXISTS idx_workflow_enrollments_workflow ON workflow_enrollm
 CREATE INDEX IF NOT EXISTS idx_workflow_steps_workflow       ON workflow_steps (workflow_id, step_order);
 `;
 
+const SQL_008 = `
+CREATE TABLE IF NOT EXISTS forms (
+  id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  org_id           UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name             TEXT NOT NULL,
+  description      TEXT,
+  fields           JSONB NOT NULL DEFAULT '[]',
+  success_message  TEXT NOT NULL DEFAULT 'Thank you for your submission!',
+  redirect_url     TEXT,
+  tags_to_apply    TEXT[] NOT NULL DEFAULT '{}',
+  workflow_id      UUID REFERENCES workflows(id) ON DELETE SET NULL,
+  is_active        BOOLEAN NOT NULL DEFAULT TRUE,
+  submission_count INT NOT NULL DEFAULT 0,
+  created_by       UUID,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS form_submissions (
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  form_id      UUID NOT NULL REFERENCES forms(id) ON DELETE CASCADE,
+  org_id       UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  contact_id   UUID REFERENCES contacts(id) ON DELETE SET NULL,
+  data         JSONB NOT NULL DEFAULT '{}',
+  ip_address   TEXT,
+  user_agent   TEXT,
+  submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DO $$ BEGIN
+  CREATE TRIGGER trg_forms_updated_at
+    BEFORE UPDATE ON forms FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER TABLE forms            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE form_submissions ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN CREATE POLICY forms_org ON forms FOR ALL TO authenticated USING (org_id = get_user_org_id()); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY forms_sr  ON forms FOR ALL TO service_role  USING (true) WITH CHECK (true);    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY form_submissions_org ON form_submissions FOR ALL TO authenticated USING (org_id = get_user_org_id()); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY form_submissions_sr  ON form_submissions FOR ALL TO service_role  USING (true) WITH CHECK (true);    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE INDEX IF NOT EXISTS idx_forms_org_id            ON forms(org_id);
+CREATE INDEX IF NOT EXISTS idx_form_submissions_form   ON form_submissions(form_id);
+CREATE INDEX IF NOT EXISTS idx_form_submissions_org    ON form_submissions(org_id);
+`;
+
 const MIGRATIONS = [
   { name: '001_initial_schema',     sql: SQL_001 },
   { name: '002_rls_policies',       sql: SQL_002 },
@@ -381,6 +428,7 @@ const MIGRATIONS = [
   { name: '005_campaign_templates', sql: SQL_005 },
   { name: '006_ab_tests',           sql: SQL_006 },
   { name: '007_workflows',          sql: SQL_007 },
+  { name: '008_forms',              sql: SQL_008 },
 ];
 
 export async function runMigrations(): Promise<void> {

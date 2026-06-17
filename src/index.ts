@@ -22,6 +22,8 @@ import segmentRoutes from './routes/segments.routes';
 import trackingRoutes from './routes/tracking.routes';
 import abTestRoutes from './routes/ab-tests.routes';
 import workflowRoutes from './routes/workflows.routes';
+import formRoutes from './routes/forms.routes';
+import publicRoutes from './routes/public.routes';
 import testRoutes from './routes/test.routes';
 
 const app = express();
@@ -62,6 +64,9 @@ app.use('/webhooks', webhookRoutes);
 // ─── Tracking Routes (no auth — called by email clients) ─────────────────────
 app.use('/track', trackingRoutes);
 
+// ─── Public Routes (no auth — must be before apiRateLimiter) ─────────────────
+app.use('/api/v1/public', publicRoutes);
+
 // ─── API Routes ──────────────────────────────────────────────────────────────
 app.use('/api/v1', apiRateLimiter);
 app.use('/api/v1/auth', authRoutes);
@@ -75,6 +80,7 @@ app.use('/api/v1/messages', messageRoutes);
 app.use('/api/v1/ab-tests', abTestRoutes);
 app.use('/api/v1', abTestRoutes); // also handles /campaigns/:id/ab-test sub-route
 app.use('/api/v1/workflows', workflowRoutes);
+app.use('/api/v1/forms', formRoutes);
 app.use('/api/v1/test', testRoutes);
 
 // ─── Serve React Client ──────────────────────────────────────────────────────

@@ -17,7 +17,7 @@ export const apiRateLimiter = rateLimit({
 
 export const webhookRateLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 1000, // Webhooks can have high volume
+  max: 1000,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -25,3 +25,15 @@ export const webhookRateLimiter = rateLimit({
     message: 'Webhook rate limit exceeded.',
   },
 });
+
+export const publicFormRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 10, // 10 submissions per IP per 10 minutes
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too Many Requests',
+    message: 'Too many form submissions. Please try again later.',
+  },
+});
+

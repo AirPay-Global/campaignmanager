@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Megaphone, Users, Shield, LogOut, Zap, Send, Inbox, Filter, GitBranch } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Users, Shield, LogOut, Zap, Send, Inbox, Filter, GitBranch, ClipboardList } from 'lucide-react';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -7,6 +7,7 @@ const navItems = [
   { to: '/contacts',  label: 'Contacts',  icon: Users },
   { to: '/segments',  label: 'Segments',  icon: Filter },
   { to: '/workflows', label: 'Workflows', icon: GitBranch },
+  { to: '/forms',     label: 'Forms',     icon: ClipboardList },
   { to: '/messages',  label: 'Messages',  icon: Send },
   { to: '/inbox',     label: 'Inbox',     icon: Inbox },
   { to: '/mandates',  label: 'Mandates',  icon: Shield },

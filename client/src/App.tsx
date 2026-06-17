@@ -11,6 +11,8 @@ import InboxPage from './pages/Inbox';
 import Segments from './pages/Segments';
 import CampaignBuilder from './pages/CampaignBuilder';
 import Workflows from './pages/Workflows';
+import Forms from './pages/Forms';
+import FormPublic from './pages/FormPublic';
 import Layout from './components/Layout';
 
 const queryClient = new QueryClient({
@@ -106,12 +108,25 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          {/* Public form page — no auth, no layout */}
+          <Route path="/f/:id" element={<FormPublic />} />
+
           <Route
             path="/workflows"
             element={
               <ProtectedRoute>
                 <Layout>
                   <Workflows />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/forms"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Forms />
                 </Layout>
               </ProtectedRoute>
             }
