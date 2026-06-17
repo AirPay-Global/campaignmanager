@@ -452,6 +452,36 @@ CREATE INDEX IF NOT EXISTS idx_attribution_org     ON contact_attribution(org_id
 CREATE INDEX IF NOT EXISTS idx_attribution_source  ON contact_attribution(org_id, source_type);
 `;
 
+const SQL_010 = `
+CREATE TABLE IF NOT EXISTS ad_audiences (
+  id                   UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  org_id               UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name                 TEXT NOT NULL,
+  description          TEXT,
+  platform             TEXT NOT NULL,
+  platform_audience_id TEXT,
+  segment_id           UUID REFERENCES audience_segments(id) ON DELETE SET NULL,
+  status               TEXT NOT NULL DEFAULT 'pending',
+  last_synced_at       TIMESTAMPTZ,
+  last_sync_count      INT,
+  last_sync_error      TEXT,
+  created_by           UUID,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DO $$ BEGIN
+  CREATE TRIGGER trg_ad_audiences_updated_at
+    BEFORE UPDATE ON ad_audiences FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER TABLE ad_audiences ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY ad_audiences_org ON ad_audiences FOR ALL TO authenticated USING (org_id = get_user_org_id()); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY ad_audiences_sr  ON ad_audiences FOR ALL TO service_role  USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE INDEX IF NOT EXISTS idx_ad_audiences_org ON ad_audiences(org_id);
+`;
+
 const MIGRATIONS = [
   { name: '001_initial_schema',     sql: SQL_001 },
   { name: '002_rls_policies',       sql: SQL_002 },
@@ -462,6 +492,7 @@ const MIGRATIONS = [
   { name: '007_workflows',          sql: SQL_007 },
   { name: '008_forms',              sql: SQL_008 },
   { name: '009_attribution',        sql: SQL_009 },
+  { name: '010_ad_audiences',       sql: SQL_010 },
 ];
 
 export async function runMigrations(): Promise<void> {

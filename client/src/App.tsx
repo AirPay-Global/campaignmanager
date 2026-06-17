@@ -14,6 +14,7 @@ import Workflows from './pages/Workflows';
 import Forms from './pages/Forms';
 import Attribution from './pages/Attribution';
 import FormPublic from './pages/FormPublic';
+import Ads from './pages/Ads';
 import Layout from './components/Layout';
 
 const queryClient = new QueryClient({
@@ -138,6 +139,16 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <Forms />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/ads"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Ads />
                 </Layout>
               </ProtectedRoute>
             }

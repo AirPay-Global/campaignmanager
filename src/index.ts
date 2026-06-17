@@ -24,6 +24,7 @@ import abTestRoutes from './routes/ab-tests.routes';
 import workflowRoutes from './routes/workflows.routes';
 import formRoutes from './routes/forms.routes';
 import publicRoutes from './routes/public.routes';
+import adsRoutes from './routes/ads.routes';
 import testRoutes from './routes/test.routes';
 
 const app = express();
@@ -81,6 +82,7 @@ app.use('/api/v1/ab-tests', abTestRoutes);
 app.use('/api/v1', abTestRoutes); // also handles /campaigns/:id/ab-test sub-route
 app.use('/api/v1/workflows', workflowRoutes);
 app.use('/api/v1/forms', formRoutes);
+app.use('/api/v1/ads', adsRoutes);
 app.use('/api/v1/test', testRoutes);
 
 // ─── Serve React Client ──────────────────────────────────────────────────────
