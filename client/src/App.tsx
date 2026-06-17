@@ -12,6 +12,7 @@ import Segments from './pages/Segments';
 import CampaignBuilder from './pages/CampaignBuilder';
 import Workflows from './pages/Workflows';
 import Forms from './pages/Forms';
+import Attribution from './pages/Attribution';
 import FormPublic from './pages/FormPublic';
 import Layout from './components/Layout';
 
@@ -117,6 +118,16 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <Workflows />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/attribution"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Attribution />
                 </Layout>
               </ProtectedRoute>
             }

@@ -190,10 +190,11 @@ class ContactService {
   async importContacts(
     orgId: string,
     contacts: CreateContactInput[],
-  ): Promise<{ imported: number; failed: number; errors: string[] }> {
+  ): Promise<{ imported: number; failed: number; errors: string[]; importedIds: string[] }> {
     let imported = 0;
     let failed = 0;
     const errors: string[] = [];
+    const importedIds: string[] = [];
 
     // Process in batches of 100
     const batchSize = 100;
@@ -220,11 +221,12 @@ class ContactService {
         errors.push(`Batch ${Math.floor(i / batchSize) + 1}: ${error.message}`);
       } else {
         imported += (data?.length ?? 0);
+        importedIds.push(...(data ?? []).map((r: { id: string }) => r.id));
       }
     }
 
     logger.info('Contact import complete', { orgId, imported, failed });
-    return { imported, failed, errors };
+    return { imported, failed, errors, importedIds };
   }
 }
 

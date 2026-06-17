@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { logger } from '../lib/logger';
 import { publicFormRateLimiter } from '../middleware/rate-limit.middleware';
 import { tryEnrollByTrigger } from '../engines/workflow.engine';
+import { recordTouch } from '../services/attribution.service';
 
 const router = Router();
 
@@ -146,6 +147,23 @@ router.post(
         .from('forms')
         .update({ submission_count: (form.submission_count as number) + 1 })
         .eq('id', form.id);
+    }
+
+    // Record attribution (non-blocking)
+    if (contactId) {
+      const utmSource   = String(submission['utm_source']   ?? '').trim() || undefined;
+      const utmMedium   = String(submission['utm_medium']   ?? '').trim() || undefined;
+      const utmCampaign = String(submission['utm_campaign'] ?? '').trim() || undefined;
+      const utmContent  = String(submission['utm_content']  ?? '').trim() || undefined;
+      recordTouch({
+        contactId,
+        orgId: form.org_id as string,
+        sourceType: 'form',
+        sourceId: form.id as string,
+        sourceName: form.name as string,
+        channel: 'web',
+        utmSource, utmMedium, utmCampaign, utmContent,
+      }).catch(() => {});
     }
 
     // Fire workflow trigger (non-blocking)

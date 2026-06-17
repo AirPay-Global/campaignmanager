@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase';
 import { logger } from '../lib/logger';
 import { markWhatsAppRead } from '../adapters/whatsapp.adapter';
 import { mandateEngine } from '../engines/mandate.engine';
+import { recordTouch } from '../services/attribution.service';
 
 interface WhatsAppWebhookEntry {
   id: string;
@@ -165,6 +166,17 @@ export async function handleWhatsAppWebhook(req: Request, res: Response): Promis
           if (inboundError) {
             logger.error('Failed to store inbound WhatsApp message', { error: inboundError.message });
             continue;
+          }
+
+          // Record attribution (non-blocking)
+          if (contact?.id) {
+            recordTouch({
+              contactId: contact.id as string,
+              orgId,
+              sourceType: 'whatsapp_inbound',
+              channel: 'whatsapp',
+              metadata: { message_id: message.id, type: messageType },
+            }).catch(() => {});
           }
 
           // Mark as read

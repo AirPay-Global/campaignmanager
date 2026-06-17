@@ -420,6 +420,38 @@ CREATE INDEX IF NOT EXISTS idx_form_submissions_form   ON form_submissions(form_
 CREATE INDEX IF NOT EXISTS idx_form_submissions_org    ON form_submissions(org_id);
 `;
 
+const SQL_009 = `
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS source           TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS first_touch_source TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS first_touch_at  TIMESTAMPTZ;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_touch_source TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_touch_at   TIMESTAMPTZ;
+
+CREATE TABLE IF NOT EXISTS contact_attribution (
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  org_id       UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  contact_id   UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+  source_type  TEXT NOT NULL,
+  source_id    TEXT,
+  source_name  TEXT,
+  channel      TEXT,
+  utm_source   TEXT,
+  utm_medium   TEXT,
+  utm_campaign TEXT,
+  utm_content  TEXT,
+  metadata     JSONB NOT NULL DEFAULT '{}',
+  occurred_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE contact_attribution ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY attribution_org ON contact_attribution FOR ALL TO authenticated USING (org_id = get_user_org_id()); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY attribution_sr  ON contact_attribution FOR ALL TO service_role  USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE INDEX IF NOT EXISTS idx_attribution_contact ON contact_attribution(contact_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_attribution_org     ON contact_attribution(org_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_attribution_source  ON contact_attribution(org_id, source_type);
+`;
+
 const MIGRATIONS = [
   { name: '001_initial_schema',     sql: SQL_001 },
   { name: '002_rls_policies',       sql: SQL_002 },
@@ -429,6 +461,7 @@ const MIGRATIONS = [
   { name: '006_ab_tests',           sql: SQL_006 },
   { name: '007_workflows',          sql: SQL_007 },
   { name: '008_forms',              sql: SQL_008 },
+  { name: '009_attribution',        sql: SQL_009 },
 ];
 
 export async function runMigrations(): Promise<void> {

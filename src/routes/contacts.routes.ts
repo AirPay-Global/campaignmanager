@@ -3,6 +3,7 @@ import { authMiddleware } from '../middleware/auth.middleware';
 import { contactService } from '../services/contact.service';
 import { auditService } from '../services/audit.service';
 import { tryEnrollByTrigger } from '../engines/workflow.engine';
+import { recordTouch } from '../services/attribution.service';
 
 const router = Router();
 
@@ -25,6 +26,17 @@ router.get(
 
     const result = await contactService.getContacts(orgId, page, limit, search);
     res.json(result);
+  }),
+);
+
+// GET /contacts/attribution/summary — must be before /:id
+router.get(
+  '/attribution/summary',
+  asyncHandler(async (req, res) => {
+    const orgId = req.user!.org_id;
+    const { getAttributionSummary } = await import('../services/attribution.service');
+    const summary = await getAttributionSummary(orgId);
+    res.json({ data: summary });
   }),
 );
 
@@ -76,6 +88,9 @@ router.post(
 
     // Fire workflow trigger (non-blocking)
     tryEnrollByTrigger(contact.id, orgId, 'contact_created').catch(() => {});
+
+    // Record attribution (non-blocking)
+    recordTouch({ contactId: contact.id, orgId, sourceType: 'manual', channel: 'web' }).catch(() => {});
 
     res.status(201).json(contact);
   }),
@@ -195,7 +210,36 @@ router.post(
       total: body.contacts.length,
     });
 
+    // Record attribution for all imported contacts (non-blocking, best-effort)
+    if (result.importedIds?.length) {
+      Promise.all(
+        result.importedIds.map(id =>
+          recordTouch({ contactId: id, orgId, sourceType: 'import' }).catch(() => {}),
+        ),
+      ).catch(() => {});
+    }
+
     res.json(result);
+  }),
+);
+
+// GET /contacts/:id/attribution — full touch timeline for a contact
+router.get(
+  '/:id/attribution',
+  asyncHandler(async (req, res) => {
+    const orgId = req.user!.org_id;
+    const { id } = req.params;
+
+    const { supabase } = await import('../lib/supabase');
+    const { data, error } = await supabase
+      .from('contact_attribution')
+      .select('*')
+      .eq('contact_id', id!)
+      .eq('org_id', orgId)
+      .order('occurred_at', { ascending: true });
+
+    if (error) { res.status(500).json({ error: error.message }); return; }
+    res.json({ data: data ?? [] });
   }),
 );
 

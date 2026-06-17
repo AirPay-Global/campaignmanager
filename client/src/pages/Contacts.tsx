@@ -1,18 +1,70 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search, Upload, Loader2, X, Users } from 'lucide-react';
+import { Plus, Search, Upload, Loader2, X, Users, Activity } from 'lucide-react';
 import api from '../lib/api';
 import { ToastContainer, useToast } from '../components/Toast';
 
-interface Contact { id:string; name:string; phone?:string; whatsapp_id?:string; email?:string; tags?:string[]; opted_out?:boolean; created_at:string; }
+interface Contact { id:string; name:string; phone?:string; whatsapp_id?:string; email?:string; tags?:string[]; opted_out?:boolean; created_at:string; source?:string; first_touch_source?:string; first_touch_at?:string; }
 interface ContactsResponse { data:Contact[]; total?:number; }
 interface FormState { name:string; phone:string; whatsapp_id:string; email:string; tags:string; }
 const defaultForm:FormState={name:'',phone:'',whatsapp_id:'',email:'',tags:''};
+
+interface AttrEvent { id:string; source_type:string; source_name?:string; channel?:string; utm_source?:string; utm_campaign?:string; occurred_at:string; }
+
+const SOURCE_COLORS: Record<string,string> = { form:'#6366f1', whatsapp_inbound:'#22c55e', sms_inbound:'#60a5fa', manual:'#f59e0b', import:'#a78bfa', campaign:'#f97316', api:'#94a3b8' };
+const SOURCE_LABELS: Record<string,string> = { form:'Form', whatsapp_inbound:'WhatsApp', sms_inbound:'SMS Inbound', manual:'Manual', import:'CSV Import', campaign:'Campaign', api:'API' };
+
+function AttributionModal({ contact, onClose }: { contact: Contact; onClose: () => void }) {
+  const { data, isLoading } = useQuery<{ data: AttrEvent[] }>({
+    queryKey: ['attribution', contact.id],
+    queryFn: () => api.get(`/contacts/${contact.id}/attribution`).then(r => r.data),
+  });
+  const events = data?.data ?? [];
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:50, padding:20 }}>
+      <div style={{ background:'rgba(15,15,30,0.98)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:18, padding:'28px', width:'100%', maxWidth:520, boxShadow:'0 24px 64px rgba(0,0,0,0.5)' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
+          <div>
+            <div style={{ fontSize:15, fontWeight:700, color:'#fff' }}>{contact.name}</div>
+            <div style={{ fontSize:11, color:'rgba(255,255,255,0.3)', marginTop:2 }}>Attribution Timeline</div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.3)', cursor:'pointer' }}><X size={16}/></button>
+        </div>
+        {isLoading ? (
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>{[1,2,3].map(i=><div key={i} className="skeleton" style={{height:14, width:`${60+i*10}%`}}/>)}</div>
+        ) : events.length === 0 ? (
+          <div style={{ padding:'24px 0', textAlign:'center', color:'rgba(255,255,255,0.25)', fontSize:13 }}>No attribution events recorded yet</div>
+        ) : (
+          <div style={{ position:'relative', paddingLeft:20 }}>
+            <div style={{ position:'absolute', left:6, top:4, bottom:4, width:2, background:'rgba(255,255,255,0.06)', borderRadius:2 }} />
+            {events.map((ev, i) => {
+              const color = SOURCE_COLORS[ev.source_type] ?? 'rgba(255,255,255,0.3)';
+              return (
+                <div key={ev.id} style={{ position:'relative', paddingBottom: i < events.length-1 ? 16 : 0 }}>
+                  <div style={{ position:'absolute', left:-17, top:2, width:10, height:10, borderRadius:'50%', background:color, border:'2px solid rgba(15,15,30,1)', flexShrink:0 }} />
+                  <div style={{ fontSize:12, fontWeight:600, color }}>
+                    {SOURCE_LABELS[ev.source_type] ?? ev.source_type}
+                    {i === 0 && <span style={{ fontSize:10, marginLeft:6, background:'rgba(255,255,255,0.06)', color:'rgba(255,255,255,0.3)', padding:'1px 6px', borderRadius:4 }}>First touch</span>}
+                    {i === events.length-1 && events.length > 1 && <span style={{ fontSize:10, marginLeft:6, background:'rgba(255,255,255,0.06)', color:'rgba(255,255,255,0.3)', padding:'1px 6px', borderRadius:4 }}>Last touch</span>}
+                  </div>
+                  {ev.source_name && <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', marginTop:1 }}>{ev.source_name}</div>}
+                  {ev.utm_campaign && <div style={{ fontSize:11, color:'rgba(255,255,255,0.3)', marginTop:1 }}>utm_campaign: {ev.utm_campaign}</div>}
+                  <div style={{ fontSize:11, color:'rgba(255,255,255,0.2)', marginTop:2 }}>{new Date(ev.occurred_at).toLocaleString()}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function Contacts() {
   const qc=useQueryClient(); const {toasts,addToast,dismissToast}=useToast();
   const [showModal,setShowModal]=useState(false); const [form,setForm]=useState<FormState>(defaultForm);
   const [formErrors,setFormErrors]=useState<Partial<FormState>>({}); const [search,setSearch]=useState('');
+  const [attrContact, setAttrContact]=useState<Contact|null>(null);
   const {data,isLoading}=useQuery<ContactsResponse>({queryKey:['contacts'],queryFn:()=>api.get('/contacts').then(r=>r.data)});
   const contacts:Contact[]=data?.data??[];
   const filtered=useMemo(()=>{const q=search.toLowerCase();if(!q)return contacts;return contacts.filter(c=>c.name?.toLowerCase().includes(q)||c.phone?.includes(q)||c.email?.toLowerCase().includes(q));},[contacts,search]);
@@ -59,15 +111,16 @@ export default function Contacts() {
           :filtered.length===0?(<div style={{padding:'56px 24px',textAlign:'center'}}><div style={{width:52,height:52,borderRadius:12,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 14px'}}><Users size={22} color="rgba(255,255,255,0.2)"/></div><p style={{color:'rgba(255,255,255,0.3)',fontSize:14,margin:0}}>{search?'No contacts match your search.':'No contacts yet. Add your first one.'}</p></div>)
           :(
             <table className="glass-table">
-              <thead><tr><th>Name</th><th>Phone</th><th>WhatsApp</th><th>Email</th><th>Tags</th><th>Status</th></tr></thead>
+              <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Tags</th><th>Source</th><th>Status</th><th></th></tr></thead>
               <tbody>{filtered.map(c=>(
                 <tr key={c.id}>
                   <td style={{color:'rgba(255,255,255,0.85)',fontWeight:500}}>{c.name}</td>
-                  <td style={{color:'rgba(255,255,255,0.3)'}}>{c.phone??'—'}</td>
-                  <td style={{color:'rgba(255,255,255,0.3)'}}>{c.whatsapp_id??'—'}</td>
+                  <td style={{color:'rgba(255,255,255,0.3)'}}>{c.phone??c.whatsapp_id??'—'}</td>
                   <td style={{color:'rgba(255,255,255,0.3)'}}>{c.email??'—'}</td>
                   <td><div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{(c.tags??[]).map(tag=><span key={tag} style={{fontSize:11,padding:'2px 7px',borderRadius:4,background:'rgba(255,255,255,0.05)',color:'rgba(255,255,255,0.35)',fontWeight:500}}>{tag}</span>)}</div></td>
+                  <td>{c.first_touch_source ? <span style={{fontSize:11,padding:'2px 8px',borderRadius:4,background:`${SOURCE_COLORS[c.first_touch_source]??'rgba(255,255,255,0.1)'}18`,color:SOURCE_COLORS[c.first_touch_source]??'rgba(255,255,255,0.3)',fontWeight:600}}>{SOURCE_LABELS[c.first_touch_source]??c.first_touch_source}</span> : <span style={{color:'rgba(255,255,255,0.15)',fontSize:12}}>—</span>}</td>
                   <td><button onClick={()=>optOutMutation.mutate({id:c.id,opted_out:!c.opted_out})} style={{padding:'3px 12px',borderRadius:20,border:'none',cursor:'pointer',fontSize:12,fontWeight:600,background:c.opted_out?'rgba(239,68,68,0.08)':'rgba(34,197,94,0.08)',color:c.opted_out?'#f87171':'#4ade80',transition:'all 0.15s'}}>{c.opted_out?'Opted out':'Opted in'}</button></td>
+                  <td><button title="View attribution" onClick={()=>setAttrContact(c)} style={{background:'rgba(255,255,255,0.03)',border:'1px solid rgba(255,255,255,0.06)',borderRadius:7,padding:'5px 7px',cursor:'pointer',color:'rgba(255,255,255,0.35)',display:'flex',alignItems:'center'}}><Activity size={13}/></button></td>
                 </tr>
               ))}</tbody>
             </table>
@@ -96,6 +149,7 @@ export default function Contacts() {
           </div>
         </div>
       )}
+      {attrContact && <AttributionModal contact={attrContact} onClose={() => setAttrContact(null)} />}
       <ToastContainer toasts={toasts} onDismiss={dismissToast}/>
     </div>
   );
