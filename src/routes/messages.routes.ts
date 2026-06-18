@@ -15,6 +15,41 @@ function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => P
   };
 }
 
+// ─── Variable substitution ───────────────────────────────────────────────────
+interface ContactRow {
+  id: string;
+  name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  whatsapp_id?: string | null;
+  custom_fields?: Record<string, unknown> | null;
+}
+
+function substituteVars(
+  template: string,
+  contact: ContactRow,
+  extraVars: Record<string, string> = {},
+): string {
+  const nameParts = (contact.name ?? '').split(' ');
+  const vars: Record<string, string> = {
+    name: contact.name ?? '',
+    first_name: nameParts[0] ?? '',
+    last_name: nameParts.slice(1).join(' ') ?? '',
+    phone: contact.phone ?? '',
+    email: contact.email ?? '',
+    whatsapp: contact.whatsapp_id ?? '',
+    // Spread custom_fields as top-level vars
+    ...Object.entries(contact.custom_fields ?? {}).reduce<Record<string, string>>(
+      (acc, [k, v]) => { acc[k] = String(v ?? ''); return acc; },
+      {},
+    ),
+    // User-supplied extra vars win over auto-mapped ones
+    ...extraVars,
+  };
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => vars[key] ?? `{{${key}}}`);
+}
+
+
 // GET /messages/inbound
 router.get(
   '/inbound',
@@ -174,6 +209,94 @@ router.post(
 
     const succeeded = results.filter(r => r.messageId).length;
     logger.info('Bulk messages enqueued', { orgId, total: results.length, succeeded, channel: body.channel });
+    res.status(202).json({ success: true, total: results.length, succeeded, results });
+  }),
+);
+
+// POST /messages/send-template-bulk — send a library template to many contacts with per-contact substitution
+router.post(
+  '/send-template-bulk',
+  asyncHandler(async (req, res) => {
+    const orgId = req.user!.org_id;
+    const body = req.body as {
+      template_id?: string;
+      channel?: string;
+      contact_ids?: string[];
+      extra_vars?: Record<string, string>;
+      scheduled_at?: string;
+    };
+
+    if (!body.template_id || !body.channel || !Array.isArray(body.contact_ids) || body.contact_ids.length === 0) {
+      res.status(400).json({ error: 'Bad Request', message: 'template_id, channel, and contact_ids[] are required' });
+      return;
+    }
+    const validChannels = ['whatsapp', 'sms', 'email', 'push'];
+    if (!validChannels.includes(body.channel)) {
+      res.status(400).json({ error: 'Bad Request', message: `channel must be one of: ${validChannels.join(', ')}` });
+      return;
+    }
+
+    // Fetch template
+    const { data: tmpl, error: tErr } = await supabase
+      .from('message_templates')
+      .select('id, name, channel, subject, body')
+      .eq('id', body.template_id)
+      .eq('org_id', orgId)
+      .single();
+
+    if (tErr || !tmpl) {
+      res.status(404).json({ error: 'Not Found', message: 'Template not found' });
+      return;
+    }
+
+    // Fetch contacts
+    const { data: contacts, error: cErr } = await supabase
+      .from('contacts')
+      .select('id, name, phone, email, whatsapp_id, custom_fields')
+      .in('id', body.contact_ids)
+      .eq('org_id', orgId);
+
+    if (cErr || !contacts) {
+      res.status(500).json({ error: 'Internal Server Error', message: 'Failed to fetch contacts' });
+      return;
+    }
+
+    const extraVars = body.extra_vars ?? {};
+    const results: Array<{ contact_id: string; messageId?: string; error?: string }> = [];
+
+    for (const contact of contacts) {
+      // Resolve channel address
+      const recipientId =
+        body.channel === 'email' ? contact.email :
+        body.channel === 'whatsapp' ? contact.whatsapp_id :
+        contact.phone;
+
+      if (!recipientId) {
+        results.push({ contact_id: contact.id, error: `No ${body.channel} address on file` });
+        continue;
+      }
+
+      const resolvedBody = substituteVars(tmpl.body, contact as ContactRow, extraVars);
+      const resolvedSubject = tmpl.subject ? substituteVars(tmpl.subject, contact as ContactRow, extraVars) : undefined;
+
+      try {
+        const messageId = await enqueue({
+          orgId,
+          channel: body.channel as 'whatsapp' | 'sms' | 'email' | 'push',
+          recipientId,
+          body: resolvedBody,
+          subject: resolvedSubject,
+          contactId: contact.id,
+          scheduledAt: body.scheduled_at,
+        });
+        results.push({ contact_id: contact.id, messageId });
+      } catch (err) {
+        results.push({ contact_id: contact.id, error: (err as Error).message });
+      }
+    }
+
+    const succeeded = results.filter(r => r.messageId).length;
+    logger.info('Template bulk messages enqueued', { orgId, template_id: body.template_id, total: results.length, succeeded });
     res.status(202).json({ success: true, total: results.length, succeeded, results });
   }),
 );
