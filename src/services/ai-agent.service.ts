@@ -1,7 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { supabase } from '../lib/supabase';
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+function getClient(): Anthropic {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY environment variable is not set');
+  return new Anthropic({ apiKey });
+}
 
 const MODEL = 'claude-haiku-4-5';
 
@@ -259,6 +263,8 @@ Always be concise and professional. When displaying lists, format them as readab
 Today is ${new Date().toISOString().split('T')[0]}.`;
 
   let continueLoop = true;
+
+  const client = getClient();
 
   while (continueLoop) {
     const stream = client.messages.stream({
