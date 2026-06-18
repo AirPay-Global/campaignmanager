@@ -133,7 +133,7 @@ function PostModal({ initial, onClose, onSave, saving }: PostModalProps) {
   return (
     <div style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background:'#0e0e1a', border:'1px solid rgba(255,255,255,0.1)', borderRadius:16, width:'100%', maxWidth:560, maxHeight:'90vh', overflowY:'auto', padding:24 }}>
+      <div style={{ background:'var(--color-modal-bg)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:16, width:'100%', maxWidth:560, maxHeight:'90vh', overflowY:'auto', padding:24 }}>
         <h3 style={{ color:'#fff', margin:'0 0 20px', fontSize:16, fontWeight:600 }}>
           {initial?.id ? 'Edit Post' : 'New Social Post'}
         </h3>
@@ -263,7 +263,7 @@ function PreviewModal({ post, onClose }: { post: SocialPost; onClose: () => void
   return (
     <div style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background:'#0e0e1a', border:'1px solid rgba(255,255,255,0.1)', borderRadius:16, width:'100%', maxWidth:480, padding:24 }}>
+      <div style={{ background:'var(--color-modal-bg)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:16, width:'100%', maxWidth:480, padding:24 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20 }}>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
             <PlatformIcon platform={post.platform} size={16} />

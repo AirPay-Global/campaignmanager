@@ -70,7 +70,7 @@ function AudienceModal({ audience, segments, onClose, onSaved }: {
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', backdropFilter:'blur(8px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:50, padding:20 }}>
-      <div style={{ background:'rgba(15,15,30,0.98)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:18, padding:'28px', width:'100%', maxWidth:480, boxShadow:'0 24px 64px rgba(0,0,0,0.5)' }}>
+      <div style={{ background:'var(--color-modal-bg)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:18, padding:'28px', width:'100%', maxWidth:480, boxShadow:'0 24px 64px rgba(0,0,0,0.5)' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
           <div style={{ fontSize:15, fontWeight:700, color:'#fff' }}>{audience ? 'Edit Audience' : 'New Ad Audience'}</div>
           <button onClick={onClose} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.3)', cursor:'pointer' }}><X size={16}/></button>

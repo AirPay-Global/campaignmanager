@@ -246,7 +246,7 @@ function WorkflowModal({
     <div className="modal-overlay">
       <div className="glass animate-slide-up" style={{ width: '100%', maxWidth: 600, maxHeight: '90vh', overflowY: 'auto' }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)', position: 'sticky', top: 0, background: 'rgba(15,15,30,0.95)', backdropFilter: 'blur(20px)', zIndex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.05)', position: 'sticky', top: 0, background: 'var(--color-modal-bg)', backdropFilter: 'blur(20px)', zIndex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <GitBranch size={16} color="#818cf8" />
             <span style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>{isEdit ? 'Edit Workflow' : 'New Workflow'}</span>

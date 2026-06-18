@@ -303,7 +303,7 @@ export default function CampaignBuilder() {
                     <Palette size={13} />
                   </ToolbarBtn>
                   {showColorPicker && (
-                    <div style={{ position: 'absolute', top: 36, left: 0, zIndex: 10, background: 'rgba(15,15,30,0.97)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: 10, display: 'flex', gap: 6, flexWrap: 'wrap', width: 148, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
+                    <div style={{ position: 'absolute', top: 36, left: 0, zIndex: 10, background: 'var(--color-modal-bg)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 10, padding: 10, display: 'flex', gap: 6, flexWrap: 'wrap', width: 148, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}>
                       {COLORS.map(c => (
                         <button key={c} type="button" onClick={() => { editor?.chain().focus().setColor(c).run(); setShowColorPicker(false); }} style={{ width: 22, height: 22, borderRadius: 5, background: c, border: '1px solid rgba(255,255,255,0.15)', cursor: 'pointer' }} />
                       ))}

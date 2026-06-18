@@ -451,7 +451,7 @@ const overlay: React.CSSProperties = {
 };
 
 const modal: React.CSSProperties = {
-  background: 'rgba(15,15,30,0.98)', border: '1px solid rgba(255,255,255,0.1)',
+  background: 'var(--color-modal-bg)', border: '1px solid rgba(255,255,255,0.1)',
   borderRadius: 18, padding: '28px 28px', width: '100%',
   boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
 };

@@ -142,7 +142,7 @@ function TemplateModal({ initial, onClose, onSave, saving }: ModalProps) {
   return (
     <div style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background:'#0e0e1a', border:'1px solid rgba(255,255,255,0.1)', borderRadius:16, width:'100%', maxWidth:600, maxHeight:'92vh', overflowY:'auto', padding:28 }}>
+      <div style={{ background:'var(--color-modal-bg)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:16, width:'100%', maxWidth:600, maxHeight:'92vh', overflowY:'auto', padding:28 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24 }}>
           <h3 style={{ color:'#fff', margin:0, fontSize:16, fontWeight:700 }}>
             {initial?.id ? 'Edit Template' : 'New Message Template'}
@@ -245,7 +245,7 @@ function PreviewDrawer({ template, onClose, onEdit }: { template: MessageTemplat
   return (
     <div style={{ position:'fixed', inset:0, zIndex:1000, background:'rgba(0,0,0,0.6)', display:'flex', justifyContent:'flex-end' }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ width: '100%', maxWidth:520, background:'#0e0e1a', borderLeft:'1px solid rgba(255,255,255,0.08)', height:'100%', overflowY:'auto', padding:28, display:'flex', flexDirection:'column', gap:16 }}>
+      <div style={{ width: '100%', maxWidth:520, background:'var(--color-modal-bg)', borderLeft:'1px solid rgba(255,255,255,0.08)', height:'100%', overflowY:'auto', padding:28, display:'flex', flexDirection:'column', gap:16 }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
           <div>
             <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
