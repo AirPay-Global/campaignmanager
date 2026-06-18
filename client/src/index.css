@@ -452,50 +452,36 @@ html[data-theme="light"] .btn-chrome:hover {
   background: linear-gradient(90deg, transparent, var(--color-divider), transparent);
 }
 
-/* ─── Light mode: page-level overrides ───────────────────────────
-   Pages set inline background:#06060f and color:#fff on their root
-   wrapper divs. The !important rules here win over inline styles.  */
+/* ─── Light mode: universal text override ────────────────────────
+   330+ inline rgba(255,255,255,...) occurrences across 15+ pages —
+   too many to patch individually. The broad !important on main *
+   beats every inline style. Higher-specificity rules below
+   re-assert white only where a dark background requires it.        */
 
+/* Page root backgrounds */
 html[data-theme="light"] main > div {
   background: var(--color-base) !important;
+}
+
+/* All text inside main → dark */
+html[data-theme="light"] main * {
   color: var(--color-text) !important;
 }
 
-/* Headings */
-html[data-theme="light"] main h1,
-html[data-theme="light"] main h2,
-html[data-theme="light"] main h3,
-html[data-theme="light"] main h4,
-html[data-theme="light"] main h5 {
-  color: var(--color-text) !important;
+/* Primary button sits on an indigo gradient — keep text white.
+   Specificity: (0-2-1) beats main * (0-1-1), so this wins. */
+html[data-theme="light"] .btn-chrome,
+html[data-theme="light"] .btn-chrome * {
+  color: #fff !important;
 }
 
-/* Subtitle / description paragraphs */
-html[data-theme="light"] main p {
-  color: var(--color-text-secondary) !important;
+/* Placeholder text stays muted, not black */
+html[data-theme="light"] .input-glass::placeholder {
+  color: var(--color-text-faint) !important;
+  opacity: 1;
 }
 
-/* Form labels */
-html[data-theme="light"] main label {
-  color: var(--color-text-dim) !important;
-}
-
-/* Glass cards inside pages get a readable text color that children inherit */
-html[data-theme="light"] main .glass {
-  color: var(--color-text);
-}
-
-/* Table overrides */
-html[data-theme="light"] main .glass-table th {
-  color: var(--color-text-muted) !important;
-  border-bottom-color: var(--color-border) !important;
-}
-html[data-theme="light"] main .glass-table td {
-  color: var(--color-text-secondary) !important;
-  border-bottom-color: var(--color-border-faint) !important;
-}
-
-/* Login / Setup pages (outside main, full-page) */
+/* Login / Setup pages (full-page outside <main>) */
 html[data-theme="light"] body > #root > div {
   background: var(--color-base);
 }
