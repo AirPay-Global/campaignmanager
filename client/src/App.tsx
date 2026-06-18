@@ -17,6 +17,7 @@ import FormPublic from './pages/FormPublic';
 import Ads from './pages/Ads';
 import Social from './pages/Social';
 import MessageTemplates from './pages/MessageTemplates';
+import AIAgent from './pages/AIAgent';
 import Layout from './components/Layout';
 
 const queryClient = new QueryClient({
@@ -181,6 +182,16 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <Mandates />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/agent"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <AIAgent />
                 </Layout>
               </ProtectedRoute>
             }

@@ -13,6 +13,7 @@
     "test": "jest --coverage"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.2",
     "@supabase/supabase-js": "^2.39.0",
     "@types/nodemailer": "^8.0.0",
     "@types/pg": "^8.20.0",
