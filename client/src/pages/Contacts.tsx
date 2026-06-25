@@ -1,13 +1,14 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search, Upload, Loader2, X, Users, Activity } from 'lucide-react';
+import { Plus, Search, Upload, Loader2, X, Users, Activity, ChevronLeft, ChevronRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import api from '../lib/api';
 import { ToastContainer, useToast } from '../components/Toast';
 
 interface Contact { id:string; name:string; phone?:string; whatsapp_id?:string; email?:string; tags?:string[]; opted_out?:boolean; created_at:string; source?:string; first_touch_source?:string; first_touch_at?:string; }
-interface ContactsResponse { data:Contact[]; total?:number; }
+interface ContactsResponse { data:Contact[]; total:number; page:number; limit:number; totalPages:number; }
 interface FormState { name:string; phone:string; whatsapp_id:string; email:string; tags:string; }
+const PAGE_SIZE = 50;
 const defaultForm:FormState={name:'',phone:'',whatsapp_id:'',email:'',tags:''};
 
 interface AttrEvent { id:string; source_type:string; source_name?:string; channel?:string; utm_source?:string; utm_campaign?:string; occurred_at:string; }
@@ -65,10 +66,27 @@ export default function Contacts() {
   const qc=useQueryClient(); const {toasts,addToast,dismissToast}=useToast();
   const [showModal,setShowModal]=useState(false); const [form,setForm]=useState<FormState>(defaultForm);
   const [formErrors,setFormErrors]=useState<Partial<FormState>>({}); const [search,setSearch]=useState('');
+  const [debouncedSearch,setDebouncedSearch]=useState(''); const [page,setPage]=useState(1);
   const [attrContact, setAttrContact]=useState<Contact|null>(null);
-  const {data,isLoading}=useQuery<ContactsResponse>({queryKey:['contacts'],queryFn:()=>api.get('/contacts').then(r=>r.data)});
+
+  useEffect(()=>{
+    const t=setTimeout(()=>{ setDebouncedSearch(search); setPage(1); },300);
+    return ()=>clearTimeout(t);
+  },[search]);
+
+  const {data,isLoading}=useQuery<ContactsResponse>({
+    queryKey:['contacts',page,debouncedSearch],
+    queryFn:()=>{
+      const p=new URLSearchParams({page:String(page),limit:String(PAGE_SIZE)});
+      if(debouncedSearch) p.set('search',debouncedSearch);
+      return api.get(`/contacts?${p}`).then(r=>r.data);
+    },
+  });
   const contacts:Contact[]=data?.data??[];
-  const filtered=useMemo(()=>{const q=search.toLowerCase();if(!q)return contacts;return contacts.filter(c=>c.name?.toLowerCase().includes(q)||c.phone?.includes(q)||c.email?.toLowerCase().includes(q));},[contacts,search]);
+  const totalPages=data?.totalPages??1;
+  const total=data?.total??0;
+  const rangeStart=total===0?0:(page-1)*PAGE_SIZE+1;
+  const rangeEnd=Math.min(page*PAGE_SIZE,total);
   const createMutation=useMutation({
     mutationFn:(p:Record<string,unknown>)=>api.post('/contacts',p),
     onSuccess:()=>{qc.invalidateQueries({queryKey:['contacts']});addToast('success','Contact added.');setShowModal(false);setForm(defaultForm);},
@@ -180,11 +198,11 @@ export default function Contacts() {
 
         <div className="glass animate-fade-in-up stagger-3" style={{overflow:'hidden'}}>
           {isLoading?(<div style={{padding:40,display:'flex',flexDirection:'column',gap:14}}>{[1,2,3,4].map(i=><div key={i} className="skeleton" style={{height:18,width:`${50+i*8}%`}}/>)}</div>)
-          :filtered.length===0?(<div style={{padding:'56px 24px',textAlign:'center'}}><div style={{width:52,height:52,borderRadius:12,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 14px'}}><Users size={22} color="rgba(255,255,255,0.2)"/></div><p style={{color:'rgba(255,255,255,0.3)',fontSize:14,margin:0}}>{search?'No contacts match your search.':'No contacts yet. Add your first one.'}</p></div>)
+          :contacts.length===0?(<div style={{padding:'56px 24px',textAlign:'center'}}><div style={{width:52,height:52,borderRadius:12,background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 14px'}}><Users size={22} color="rgba(255,255,255,0.2)"/></div><p style={{color:'rgba(255,255,255,0.3)',fontSize:14,margin:0}}>{search?'No contacts match your search.':'No contacts yet. Add your first one.'}</p></div>)
           :(
             <table className="glass-table">
               <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Tags</th><th>Source</th><th>Status</th><th></th></tr></thead>
-              <tbody>{filtered.map(c=>(
+              <tbody>{contacts.map(c=>(
                 <tr key={c.id}>
                   <td style={{color:'rgba(255,255,255,0.85)',fontWeight:500}}>{c.name}</td>
                   <td style={{color:'rgba(255,255,255,0.3)'}}>{c.phone??c.whatsapp_id??'—'}</td>
@@ -198,6 +216,27 @@ export default function Contacts() {
             </table>
           )}
         </div>
+
+        {totalPages>1&&(
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:16,padding:'0 2px'}}>
+            <span style={{fontSize:12,color:'rgba(255,255,255,0.3)'}}>
+              {rangeStart}–{rangeEnd} of {total} contacts
+            </span>
+            <div style={{display:'flex',alignItems:'center',gap:4}}>
+              <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1} className="btn-glass" style={{padding:'6px 10px',borderRadius:8,fontSize:12,display:'flex',alignItems:'center',opacity:page===1?0.3:1,cursor:page===1?'default':'pointer'}}>
+                <ChevronLeft size={14}/>
+              </button>
+              {Array.from({length:totalPages},(_,i)=>i+1).filter(n=>n===1||n===totalPages||Math.abs(n-page)<=1).reduce<(number|'…')[]>((acc,n,i,arr)=>{if(i>0&&(n as number)-(arr[i-1] as number)>1)acc.push('…');acc.push(n);return acc;},[]).map((n,i)=>
+                n==='…'
+                  ? <span key={`ellipsis-${i}`} style={{padding:'0 4px',color:'rgba(255,255,255,0.2)',fontSize:12}}>…</span>
+                  : <button key={n} onClick={()=>setPage(n as number)} className={page===n?'btn-chrome':'btn-glass'} style={{minWidth:32,padding:'6px 8px',borderRadius:8,fontSize:12,fontWeight:page===n?700:500}}>{n}</button>
+              )}
+              <button onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages} className="btn-glass" style={{padding:'6px 10px',borderRadius:8,fontSize:12,display:'flex',alignItems:'center',opacity:page===totalPages?0.3:1,cursor:page===totalPages?'default':'pointer'}}>
+                <ChevronRight size={14}/>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {showModal&&(
