@@ -196,10 +196,19 @@ class ContactService {
     const errors: string[] = [];
     const importedIds: string[] = [];
 
+    // Deduplicate by phone (last entry wins) before batching so that
+    // within-batch duplicates don't trigger a PG "cannot affect row a second time" error.
+    const seen = new Map<string, CreateContactInput>();
+    for (const c of contacts) {
+      const key = c.phone ?? c.email ?? c.whatsapp_id ?? JSON.stringify(c);
+      seen.set(key, c);
+    }
+    const deduped = Array.from(seen.values());
+
     // Process in batches of 100
     const batchSize = 100;
-    for (let i = 0; i < contacts.length; i += batchSize) {
-      const batch = contacts.slice(i, i + batchSize);
+    for (let i = 0; i < deduped.length; i += batchSize) {
+      const batch = deduped.slice(i, i + batchSize);
       const rows = batch.map((c) => ({
         org_id: orgId,
         phone: c.phone ?? null,
@@ -225,7 +234,8 @@ class ContactService {
       }
     }
 
-    logger.info('Contact import complete', { orgId, imported, failed });
+    const duplicatesRemoved = contacts.length - deduped.length;
+    logger.info('Contact import complete', { orgId, imported, failed, duplicatesRemoved });
     return { imported, failed, errors, importedIds };
   }
 }
