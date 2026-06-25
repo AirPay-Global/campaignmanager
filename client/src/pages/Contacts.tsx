@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Search, Upload, Loader2, X, Users, Activity } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import api from '../lib/api';
 import { ToastContainer, useToast } from '../components/Toast';
 
@@ -80,7 +81,78 @@ export default function Contacts() {
   });
   const validate=()=>{const errors:Partial<FormState>={};if(!form.name.trim())errors.name='Name is required.';setFormErrors(errors);return Object.keys(errors).length===0;};
   const handleSubmit=(e:React.FormEvent)=>{e.preventDefault();if(!validate())return;const payload:Record<string,unknown>={name:form.name};if(form.phone)payload.phone=form.phone;if(form.whatsapp_id)payload.whatsapp_id=form.whatsapp_id;if(form.email)payload.email=form.email;if(form.tags)payload.tags=form.tags.split(',').map(t=>t.trim()).filter(Boolean);createMutation.mutate(payload);};
-  const handleCSV=(e:React.ChangeEvent<HTMLInputElement>)=>{const file=e.target.files?.[0];if(!file)return;const reader=new FileReader();reader.onload=async(ev)=>{const text=ev.target?.result as string;const lines=text.split('\n').filter(Boolean);if(lines.length<2){addToast('error','CSV needs header + data rows.');return;}const headers=lines[0].split(',').map(h=>h.trim().toLowerCase().replace(/\s+/g,'_'));const rows=lines.slice(1).map(row=>{const values=row.split(',').map(v=>v.trim().replace(/^"|"$/g,''));const obj:Record<string,unknown>={};headers.forEach((h,i)=>{if(values[i])obj[h]=values[i];});if(obj.tags&&typeof obj.tags==='string')obj.tags=obj.tags.split(';').map(t=>t.trim()).filter(Boolean);return obj;}).filter(c=>c.name);if(rows.length===0){addToast('error','No valid contacts found.');return;}let success=0,failed=0;for(const row of rows){try{await api.post('/contacts',row);success++;}catch{failed++;}}qc.invalidateQueries({queryKey:['contacts']});addToast(failed===0?'success':'error',`Imported ${success}${failed>0?`, ${failed} failed`:''} contact(s).`);};reader.readAsText(file);e.target.value='';};
+  function normalizeHeader(h: string): string { return h.trim().toLowerCase().replace(/\s+/g,'_'); }
+  function detectCol(headers: string[], candidates: string[]): string|undefined { return headers.find(h => candidates.includes(normalizeHeader(h))); }
+
+  function rowsToContacts(headers: string[], rows: Record<string,unknown>[]) {
+    const emailCol = detectCol(headers, ['email','email_address']);
+    const nameCol  = detectCol(headers, ['name','names','full_name','full_name_','contact_name']);
+    const phoneCol = detectCol(headers, ['phone','phone_number','phone_number_','mobile','cell']);
+    const waCol    = detectCol(headers, ['whatsapp_id','whatsapp','whatsapp_number']);
+    const membershipCol = detectCol(headers, ['membership','membership_','member_type']);
+    const topicCol = detectCol(headers, ['topic','topic_','subject']);
+
+    return rows.map(row => {
+      const name  = nameCol  ? String(row[nameCol]  ?? '').trim() : '';
+      const email = emailCol ? String(row[emailCol] ?? '').trim() : '';
+      const phone = phoneCol ? String(row[phoneCol] ?? '').trim() : '';
+      const wa    = waCol    ? String(row[waCol]    ?? '').trim() : '';
+      if (!name && !email && !phone && !wa) return null;
+      const contact: Record<string,unknown> = {};
+      if (name)  contact.name  = name;
+      if (email) contact.email = email;
+      if (phone) contact.phone = phone;
+      if (wa)    contact.whatsapp_id = wa;
+      const tags: string[] = [];
+      if (membershipCol && row[membershipCol]) tags.push(String(row[membershipCol]).trim());
+      if (tags.length) contact.tags = tags;
+      const custom: Record<string,unknown> = {};
+      if (topicCol && row[topicCol]) custom['topic'] = String(row[topicCol]).trim();
+      if (Object.keys(custom).length) contact.custom_fields = custom;
+      return contact;
+    }).filter(Boolean);
+  }
+
+  async function bulkImport(contacts: Record<string,unknown>[]) {
+    if (contacts.length === 0) { addToast('error','No valid contacts found.'); return; }
+    try {
+      const res = await api.post('/contacts/import', { contacts });
+      const { imported, failed } = res.data as { imported: number; failed: number };
+      qc.invalidateQueries({ queryKey: ['contacts'] });
+      addToast(failed === 0 ? 'success' : 'error', `Imported ${imported}${failed > 0 ? `, ${failed} failed` : ''} contact(s).`);
+    } catch { addToast('error', 'Import failed.'); }
+  }
+
+  const handleFileImport=(e:React.ChangeEvent<HTMLInputElement>)=>{
+    const file=e.target.files?.[0]; if(!file)return;
+    const isXlsx = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+    const reader=new FileReader();
+    if (isXlsx) {
+      reader.onload=async(ev)=>{
+        const data = new Uint8Array(ev.target?.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type:'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rawRows = XLSX.utils.sheet_to_json<Record<string,unknown>>(ws, { defval:'' });
+        if (!rawRows.length) { addToast('error','No data found in spreadsheet.'); return; }
+        const headers = Object.keys(rawRows[0]);
+        const contacts = rowsToContacts(headers, rawRows) as Record<string,unknown>[];
+        await bulkImport(contacts);
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.onload=async(ev)=>{
+        const text=ev.target?.result as string;
+        const lines=text.split('\n').filter(Boolean);
+        if(lines.length<2){addToast('error','CSV needs header + data rows.');return;}
+        const headers=lines[0].split(',').map(h=>h.trim());
+        const rows=lines.slice(1).map(row=>{const values=row.split(',').map(v=>v.trim().replace(/^"|"$/g,''));const obj:Record<string,unknown>={};headers.forEach((h,i)=>{if(values[i])obj[h]=values[i];});return obj;});
+        const contacts = rowsToContacts(headers, rows) as Record<string,unknown>[];
+        await bulkImport(contacts);
+      };
+      reader.readAsText(file);
+    }
+    e.target.value='';
+  };
 
   return (
     <div style={{padding:'32px',minHeight:'100vh',background:'#06060f',position:'relative'}}>
@@ -93,7 +165,7 @@ export default function Contacts() {
           </div>
           <div style={{display:'flex',gap:8}}>
             <label className="btn-glass" style={{display:'flex',alignItems:'center',gap:8,padding:'10px 16px',borderRadius:10,fontSize:13,fontWeight:600,cursor:'pointer'}}>
-              <Upload size={13}/> Import CSV <input type="file" accept=".csv" style={{display:'none'}} onChange={handleCSV}/>
+              <Upload size={13}/> Import <input type="file" accept=".csv,.xlsx,.xls" style={{display:'none'}} onChange={handleFileImport}/>
             </label>
             <button className="btn-chrome" onClick={()=>{setShowModal(true);setForm(defaultForm);setFormErrors({});}} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 20px',borderRadius:10,fontSize:13}}>
               <Plus size={15}/> Add Contact
