@@ -196,14 +196,20 @@ class ContactService {
     const errors: string[] = [];
     const importedIds: string[] = [];
 
-    // Deduplicate by phone (last entry wins) before batching so that
-    // within-batch duplicates don't trigger a PG "cannot affect row a second time" error.
-    const seen = new Map<string, CreateContactInput>();
-    for (const c of contacts) {
-      const key = c.phone ?? c.email ?? c.whatsapp_id ?? JSON.stringify(c);
-      seen.set(key, c);
+    // Deduplicate by phone then by email before batching.
+    // Both (org_id, phone) and (org_id, email) have UNIQUE constraints, so any
+    // within-batch duplicate on either column causes PG to reject the whole batch.
+    const byPhone = new Map<string, CreateContactInput>();
+    for (let i = 0; i < contacts.length; i++) {
+      byPhone.set(contacts[i].phone ?? `__nophone_${i}`, contacts[i]);
     }
-    const deduped = Array.from(seen.values());
+    const step1 = Array.from(byPhone.values());
+
+    const byEmail = new Map<string, CreateContactInput>();
+    for (let i = 0; i < step1.length; i++) {
+      byEmail.set(step1[i].email?.toLowerCase().trim() ?? `__noemail_${i}`, step1[i]);
+    }
+    const deduped = Array.from(byEmail.values());
 
     // Process in batches of 100
     const batchSize = 100;
