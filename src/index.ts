@@ -159,7 +159,13 @@ const PORT = Number(process.env.PORT ?? '3000');
 
 // Run migrations then start server
 runMigrations()
-  .catch(err => logger.error('Startup migration error', { error: err.message }))
+  .catch(err => {
+    if (err.message.includes('DATABASE_URL')) {
+      logger.warn('DATABASE_URL not set — skipping server-side migrations. Set DATABASE_URL (Supabase direct connection string) or apply supabase/migrations/ via `supabase db push`.');
+    } else {
+      logger.error('Startup migration error', { error: err.message });
+    }
+  })
   .finally(() => {
     app.listen(PORT, () => {
       logger.info(`AirPay Campaign Manager listening on port ${PORT}`, {
