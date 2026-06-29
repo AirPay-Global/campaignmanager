@@ -179,7 +179,14 @@ class CampaignEngine {
       const recipientId = this.getRecipientId(campaign.channel, contact);
       if (!recipientId) continue;
 
-      const templateVars = this.interpolateVariables(campaign.template_vars ?? {}, contact);
+      // Merge WA-specific metadata as reserved keys so the queue engine can route correctly
+      const rawVars = { ...campaign.template_vars };
+      if (campaign.channel === 'whatsapp' && campaign.metadata) {
+        const meta = campaign.metadata as Record<string, unknown>;
+        if (meta.wa_language) rawVars['__lang'] = meta.wa_language as string;
+        if (meta.wa_account_id) rawVars['__account_id'] = meta.wa_account_id as string;
+      }
+      const templateVars = this.interpolateVariables(rawVars, contact);
       const scheduledAt = campaign.scheduled_at
         ? this.calculateScheduledAt(campaign.scheduled_at, enqueued)
         : null;
