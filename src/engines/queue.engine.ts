@@ -3,6 +3,7 @@ import { logger } from '../lib/logger';
 import { sendWhatsAppTemplate, sendWhatsAppText, WhatsAppTemplateComponent } from '../adapters/whatsapp.adapter';
 import { sendSMS } from '../adapters/sms.adapter';
 import { sendEmail } from '../adapters/email.adapter';
+import { callMetaTemplateApi, parseMetaError } from '../services/whatsapp-cloud.service';
 
 type ChannelType = 'whatsapp' | 'sms' | 'email' | 'push';
 type MessageStatus = 'pending' | 'queued' | 'sent' | 'delivered' | 'read' | 'failed' | 'bounced';
@@ -18,6 +19,7 @@ interface OutboundMessage {
   body: string | null;
   subject: string | null;
   template_name: string | null;
+  template_language: string | null;
   template_vars: Record<string, unknown>;
   status: MessageStatus;
   retry_count: number;
@@ -186,6 +188,9 @@ async function promoteCampaignMessages(): Promise<void> {
           ? interpolateBody(campaign.message_body, cm.template_vars)
           : null);
 
+      // Extract __lang from template_vars to populate template_language column
+      const { __lang: templateLang } = cm.template_vars as Record<string, unknown>;
+
       const { error: outboundError } = await supabase.from('outbound_messages').insert({
         org_id: cm.org_id,
         contact_id: cm.contact_id,
@@ -196,6 +201,7 @@ async function promoteCampaignMessages(): Promise<void> {
         body,
         subject: campaign.subject,
         template_name: campaign.template_name,
+        template_language: typeof templateLang === 'string' ? templateLang : null,
         template_vars: cm.template_vars,
         status: 'pending',
       });
@@ -228,16 +234,41 @@ export async function processMessage(message: OutboundMessage): Promise<void> {
     switch (message.channel) {
       case 'whatsapp': {
         if (message.template_name) {
-          // Template message — extract reserved __lang key before building components
-          const { __lang: langCode, ...varsWithoutLang } = message.template_vars as Record<string, unknown>;
-          const components = buildWhatsAppComponents(varsWithoutLang);
-          const result = await sendWhatsAppTemplate({
-            to: message.recipient_id,
-            templateName: message.template_name,
-            languageCode: typeof langCode === 'string' ? langCode : undefined,
-            components,
-          });
-          externalId = result.messages?.[0]?.id;
+          const { __lang: langVar, __account_id: accountIdVar, ...varsWithoutReserved } = message.template_vars as Record<string, unknown>;
+          const langCode = message.template_language ?? (typeof langVar === 'string' ? langVar : undefined);
+          const accountId = typeof accountIdVar === 'string' ? accountIdVar : undefined;
+
+          if (langCode) {
+            // Cloud API path — uses the new WhatsApp Cloud service
+            const components = buildWhatsAppComponents(varsWithoutReserved);
+            try {
+              const result = await callMetaTemplateApi({
+                orgId: message.org_id,
+                to: message.recipient_id,
+                templateName: message.template_name,
+                languageCode: langCode,
+                components,
+                accountId,
+              });
+              externalId = result.metaMessageId;
+              // Persist meta_message_id for webhook delivery tracking
+              await supabase.from('outbound_messages')
+                .update({ meta_message_id: result.metaMessageId })
+                .eq('id', message.id);
+            } catch (err) {
+              throw new Error(parseMetaError(err));
+            }
+          } else {
+            // Legacy adapter path
+            const components = buildWhatsAppComponents(varsWithoutReserved);
+            const result = await sendWhatsAppTemplate({
+              to: message.recipient_id,
+              templateName: message.template_name,
+              languageCode: typeof langVar === 'string' ? langVar : undefined,
+              components,
+            });
+            externalId = result.messages?.[0]?.id;
+          }
         } else if (message.body) {
           // Text message
           const result = await sendWhatsAppText({

@@ -241,6 +241,58 @@ export interface SendTemplateResult {
   error?: string;
 }
 
+// Low-level Meta API call — does NOT create or update any DB records.
+// Used by the queue engine when an outbound_messages record already exists.
+export async function callMetaTemplateApi(opts: {
+  orgId: string;
+  to: string;
+  templateName: string;
+  languageCode: string;
+  components?: unknown[];
+  accountId?: string;
+}): Promise<{ metaMessageId: string }> {
+  const phone = normalizePhone(opts.to);
+  const graphVersion = process.env.META_GRAPH_VERSION ?? 'v22.0';
+
+  let accessToken: string;
+  let phoneNumberId: string;
+
+  if (opts.accountId) {
+    const account = await getAccount(opts.orgId, opts.accountId);
+    if (!account) throw new Error('WhatsApp account not found.');
+    accessToken = account.access_token;
+    phoneNumberId = account.phone_number_id;
+  } else {
+    const env = getEnvConfig();
+    if (!env.accessToken || !env.phoneNumberId) {
+      throw new Error('No WhatsApp account configured. Add an account in the Configuration tab.');
+    }
+    accessToken = env.accessToken;
+    phoneNumberId = env.phoneNumberId;
+  }
+
+  const payload = {
+    messaging_product: 'whatsapp',
+    to: phone,
+    type: 'template',
+    template: {
+      name: opts.templateName,
+      language: { code: opts.languageCode },
+      ...(opts.components?.length ? { components: opts.components } : {}),
+    },
+  };
+
+  const res = await axios.post<{ messages: { id: string }[] }>(
+    `https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`,
+    payload,
+    { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' } },
+  );
+
+  const metaMessageId = res.data.messages?.[0]?.id ?? '';
+  logger.info('WhatsApp Cloud template sent via queue', { to: phone, templateName: opts.templateName, metaMessageId });
+  return { metaMessageId };
+}
+
 export async function sendWhatsAppCloudTemplate(opts: SendTemplateOptions): Promise<SendTemplateResult> {
   let recipientPhone: string;
   try {
