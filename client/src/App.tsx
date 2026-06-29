@@ -18,6 +18,7 @@ import Ads from './pages/Ads';
 import Social from './pages/Social';
 import MessageTemplates from './pages/MessageTemplates';
 import AIAgent from './pages/AIAgent';
+import WhatsApp from './pages/WhatsApp';
 import Layout from './components/Layout';
 import { ThemeProvider } from './contexts/ThemeContext';
 
@@ -194,6 +195,16 @@ export default function App() {
               <ProtectedRoute>
                 <Layout>
                   <AIAgent />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/whatsapp"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <WhatsApp />
                 </Layout>
               </ProtectedRoute>
             }
