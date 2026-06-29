@@ -372,13 +372,13 @@ function MessagesTab() {
                     <span><strong>Read:</strong> {fmtTs(m.read_at)}</span>
                     <span><strong>Failed:</strong> {fmtTs(m.failed_at)}</span>
                   </div>
-                  {m.error_details && (
+                  {!!m.error_details && (
                     <div style={{ marginBottom: 10 }}>
                       <div style={{ color: '#f87171', fontWeight: 600, marginBottom: 4 }}>Error Details</div>
                       <pre style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 6, padding: 8, color: '#fca5a5', overflow: 'auto', maxHeight: 120, fontSize: 11 }}>{JSON.stringify(m.error_details, null, 2)}</pre>
                     </div>
                   )}
-                  {m.meta_response && (
+                  {!!m.meta_response && (
                     <div>
                       <div style={{ color: 'var(--color-text-dim)', fontWeight: 600, marginBottom: 4 }}>Meta Response</div>
                       <pre style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--color-border)', borderRadius: 6, padding: 8, color: 'var(--color-text-secondary)', overflow: 'auto', maxHeight: 160, fontSize: 11 }}>{JSON.stringify(m.meta_response, null, 2)}</pre>
