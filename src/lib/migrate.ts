@@ -598,6 +598,42 @@ CREATE INDEX IF NOT EXISTS idx_webhook_logs_source     ON webhook_logs(source, c
 CREATE INDEX IF NOT EXISTS idx_webhook_logs_created_at ON webhook_logs(created_at DESC);
 `;
 
+const SQL_014 = `
+-- WhatsApp Business Accounts (multi-WABA support)
+CREATE TABLE IF NOT EXISTS whatsapp_accounts (
+  id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  org_id           UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name             TEXT NOT NULL,
+  waba_id          TEXT NOT NULL,
+  phone_number_id  TEXT NOT NULL,
+  access_token     TEXT NOT NULL,
+  is_active        BOOLEAN NOT NULL DEFAULT TRUE,
+  last_synced_at   TIMESTAMPTZ,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (org_id, waba_id)
+);
+
+DO $$ BEGIN
+  CREATE TRIGGER trg_whatsapp_accounts_updated_at
+    BEFORE UPDATE ON whatsapp_accounts FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER TABLE whatsapp_accounts ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY wa_accounts_org ON whatsapp_accounts FOR ALL TO authenticated USING (org_id = get_user_org_id()); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY wa_accounts_sr  ON whatsapp_accounts FOR ALL TO service_role  USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE INDEX IF NOT EXISTS idx_whatsapp_accounts_org ON whatsapp_accounts(org_id);
+
+-- Link templates to their source account
+ALTER TABLE whatsapp_cloud_templates ADD COLUMN IF NOT EXISTS waba_id     TEXT;
+ALTER TABLE whatsapp_cloud_templates ADD COLUMN IF NOT EXISTS waba_name   TEXT;
+ALTER TABLE whatsapp_cloud_templates ADD COLUMN IF NOT EXISTS account_id  UUID REFERENCES whatsapp_accounts(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_wct_waba_id    ON whatsapp_cloud_templates(org_id, waba_id);
+CREATE INDEX IF NOT EXISTS idx_wct_account_id ON whatsapp_cloud_templates(account_id);
+`;
+
 const MIGRATIONS = [
   { name: '001_initial_schema',     sql: SQL_001 },
   { name: '002_rls_policies',       sql: SQL_002 },
@@ -612,6 +648,7 @@ const MIGRATIONS = [
   { name: '011_social_posts',       sql: SQL_011 },
   { name: '012_message_templates',  sql: SQL_012 },
   { name: '013_whatsapp_cloud',     sql: SQL_013 },
+  { name: '014_whatsapp_accounts',  sql: SQL_014 },
 ];
 
 export async function runMigrations(): Promise<void> {
