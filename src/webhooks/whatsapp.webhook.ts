@@ -108,12 +108,12 @@ export async function handleWhatsAppWebhook(req: Request, res: Response): Promis
 
   const payload = req.body as WhatsAppWebhookPayload;
 
-  // Store raw payload before processing (non-blocking)
-  supabase.from('webhook_logs').insert({
+  // Store raw payload before processing (non-blocking, fire-and-forget)
+  void Promise.resolve(supabase.from('webhook_logs').insert({
     source: 'whatsapp',
     payload: payload as unknown as Record<string, unknown>,
     headers: { 'x-hub-signature-256': req.headers['x-hub-signature-256'] },
-  }).then(() => {}).catch(() => {});
+  }));
 
   if (payload.object !== 'whatsapp_business_account') {
     return;
