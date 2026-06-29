@@ -21,6 +21,7 @@ import AIAgent from './pages/AIAgent';
 import WhatsApp from './pages/WhatsApp';
 import Layout from './components/Layout';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { BusinessAccountProvider } from './contexts/BusinessAccountContext';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -41,6 +42,7 @@ export default function App() {
   return (
     <ThemeProvider>
     <QueryClientProvider client={queryClient}>
+    <BusinessAccountProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/setup" element={<Setup />} />
@@ -211,6 +213,7 @@ export default function App() {
           />
         </Routes>
       </BrowserRouter>
+    </BusinessAccountProvider>
     </QueryClientProvider>
     </ThemeProvider>
   );

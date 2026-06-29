@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/api';
+import { useBusinessAccount } from '../contexts/BusinessAccountContext';
 import {
   RefreshCw, Send, MessageSquare, CheckCircle, XCircle, Clock,
   AlertTriangle, ChevronDown, ChevronUp, Eye, EyeOff, Loader2,
@@ -150,7 +151,8 @@ function BusinessFilter({ accounts, selected, onChange }: {
 function TemplatesTab({ accounts }: { accounts: WaAccount[] }) {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [wabaFilter, setWabaFilter] = useState('');
+  const { selected: globalSelected } = useBusinessAccount();
+  const [wabaFilter, setWabaFilter] = useState(globalSelected?.waba_id ?? '');
 
   const { data, isLoading } = useQuery({
     queryKey: ['wa-cloud-templates', wabaFilter],
@@ -265,7 +267,8 @@ function TemplatesTab({ accounts }: { accounts: WaAccount[] }) {
 // ─── Send tab ──────────────────────────────────────────────────────────────────
 
 function SendTab({ accounts }: { accounts: WaAccount[] }) {
-  const [form, setForm] = useState({ to: '', templateName: '', languageCode: '', components: '', accountId: '' });
+  const { selectedId: globalSelectedId } = useBusinessAccount();
+  const [form, setForm] = useState({ to: '', templateName: '', languageCode: '', components: '', accountId: globalSelectedId ?? '' });
   const [selectedTemplate, setSelectedTemplate] = useState<CloudTemplate | null>(null);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -720,12 +723,7 @@ type Tab = 'templates' | 'send' | 'messages' | 'config';
 
 export default function WhatsApp() {
   const [tab, setTab] = useState<Tab>('templates');
-
-  const { data: accountsData } = useQuery({
-    queryKey: ['wa-cloud-accounts'],
-    queryFn: () => api.get('/whatsapp-cloud/accounts').then(r => r.data.data as WaAccount[]),
-  });
-  const accounts = accountsData ?? [];
+  const { accounts } = useBusinessAccount();
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'templates', label: 'Templates',      icon: <MessageSquare size={14} /> },
