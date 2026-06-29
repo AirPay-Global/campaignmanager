@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Megaphone, Users, Shield, LogOut, Zap, Send, Inbox, Filter, GitBranch, ClipboardList, TrendingUp, Target, Share2, FileText, Bot, Sun, Moon, MessageCircle } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Users, Shield, LogOut, Zap, Send, Inbox, Filter, GitBranch, ClipboardList, TrendingUp, Target, Share2, FileText, Bot, Sun, Moon, MessageCircle, ChevronDown } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useBusinessAccount } from '../contexts/BusinessAccountContext';
 
 const navItems = [
   { to: '/dashboard',   label: 'Dashboard',   icon: LayoutDashboard },
@@ -24,6 +25,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const { theme, toggle } = useTheme();
   const isDark = theme === 'dark';
+  const { accounts, selectedId, setSelectedId } = useBusinessAccount();
 
   return (
     <div style={{ display:'flex', height:'100vh', background:'var(--color-base)', overflow:'hidden', position:'relative', transition:'background 0.25s ease' }}>
@@ -47,8 +49,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       }}>
         {/* Logo */}
         <div style={{
-          padding: '24px 20px 20px',
-          borderBottom: '1px solid var(--color-border-faint)',
+          padding: '24px 20px 16px',
+          borderBottom: accounts.length > 0 ? 'none' : '1px solid var(--color-border-faint)',
           display: 'flex',
           alignItems: 'center',
           gap: 12,
@@ -69,6 +71,40 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <div style={{ color:'var(--color-text-dim)', fontSize:10, letterSpacing:'0.1em', textTransform:'uppercase' }}>Campaigns</div>
           </div>
         </div>
+
+        {/* Business account switcher */}
+        {accounts.length > 0 && (
+          <div style={{ padding: '8px 12px 12px', borderBottom: '1px solid var(--color-border-faint)' }}>
+            <div style={{ fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-dim)', marginBottom: 5, paddingLeft: 2 }}>Business</div>
+            <div style={{ position: 'relative' }}>
+              <select
+                value={selectedId ?? ''}
+                onChange={e => setSelectedId(e.target.value || null)}
+                style={{
+                  width: '100%',
+                  padding: '7px 28px 7px 10px',
+                  borderRadius: 8,
+                  background: 'var(--color-nav-active-bg)',
+                  border: '1px solid var(--color-nav-active-border)',
+                  color: 'var(--color-text)',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  appearance: 'none',
+                  WebkitAppearance: 'none',
+                  outline: 'none',
+                  boxShadow: 'var(--color-nav-active-shadow)',
+                }}
+              >
+                {accounts.length > 1 && <option value="">All businesses</option>}
+                {accounts.map(a => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+              <ChevronDown size={12} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--color-text-dim)' }} />
+            </div>
+          </div>
+        )}
 
         {/* Nav */}
         <nav style={{ flex:1, padding:'12px 10px', display:'flex', flexDirection:'column', gap:2, overflowY:'auto' }}>
