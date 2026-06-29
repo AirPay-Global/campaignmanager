@@ -9,6 +9,7 @@ export interface BusinessAccount {
   phone_number_id: string;
   is_active: boolean;
   last_synced_at: string | null;
+  created_at: string;
 }
 
 interface BusinessAccountContextValue {
