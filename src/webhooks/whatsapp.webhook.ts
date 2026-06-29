@@ -108,6 +108,13 @@ export async function handleWhatsAppWebhook(req: Request, res: Response): Promis
 
   const payload = req.body as WhatsAppWebhookPayload;
 
+  // Store raw payload before processing (non-blocking)
+  supabase.from('webhook_logs').insert({
+    source: 'whatsapp',
+    payload: payload as unknown as Record<string, unknown>,
+    headers: { 'x-hub-signature-256': req.headers['x-hub-signature-256'] },
+  }).then(() => {}).catch(() => {});
+
   if (payload.object !== 'whatsapp_business_account') {
     return;
   }
@@ -222,21 +229,37 @@ export async function handleWhatsAppWebhook(req: Request, res: Response): Promis
           const eventType = eventTypeMap[status.status];
           if (!eventType) continue;
 
-          // Find the outbound message by external_id
+          const occurredAt = new Date(Number(status.timestamp) * 1000).toISOString();
+
+          // Find the outbound message by meta_message_id or external_id
           const { data: outbound } = await supabase
             .from('outbound_messages')
             .select('id')
-            .eq('external_id', status.id)
+            .or(`meta_message_id.eq.${status.id},external_id.eq.${status.id}`)
             .eq('org_id', orgId)
+            .limit(1)
             .single();
 
           if (outbound) {
+            const timestampField: Record<string, string> = {
+              sent: 'sent_at',
+              delivered: 'delivered_at',
+              read: 'read_at',
+              failed: 'failed_at',
+            };
+
+            const updatePayload: Record<string, unknown> = { status: eventType };
+            const tsField = timestampField[eventType];
+            if (tsField) updatePayload[tsField] = occurredAt;
+
+            if (eventType === 'failed' && status.errors?.length) {
+              updatePayload['error_message'] = status.errors.map((e) => e.title).join('; ');
+              updatePayload['error_details'] = status.errors;
+            }
+
             await supabase
               .from('outbound_messages')
-              .update({
-                status: eventType,
-                ...(eventType === 'sent' ? { sent_at: new Date().toISOString() } : {}),
-              })
+              .update(updatePayload)
               .eq('id', outbound.id);
 
             await supabase.from('delivery_logs').insert({
@@ -244,7 +267,7 @@ export async function handleWhatsAppWebhook(req: Request, res: Response): Promis
               outbound_message_id: outbound.id,
               event_type: eventType,
               metadata: { status: status.status, errors: status.errors },
-              occurred_at: new Date(Number(status.timestamp) * 1000).toISOString(),
+              occurred_at: occurredAt,
             });
           }
         } catch (err: unknown) {

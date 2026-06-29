@@ -31,6 +31,8 @@ import socialRoutes from './routes/social.routes';
 import messageTemplateRoutes from './routes/message-templates.routes';
 import agentRoutes from './routes/agent.routes';
 import testRoutes from './routes/test.routes';
+import whatsappCloudRoutes from './routes/whatsapp-cloud.routes';
+import { syncWhatsAppTemplates } from './services/whatsapp-cloud.service';
 
 const app = express();
 
@@ -92,6 +94,7 @@ app.use('/api/v1/social', socialRoutes);
 app.use('/api/v1/message-templates', messageTemplateRoutes);
 app.use('/api/v1/agent', agentRoutes);
 app.use('/api/v1/test', testRoutes);
+app.use('/api/v1/whatsapp-cloud', whatsappCloudRoutes);
 
 // ─── Serve React Client ──────────────────────────────────────────────────────
 const clientDist = path.join(__dirname, '../client/dist');
@@ -152,6 +155,20 @@ if (process.env.RUN_QUEUE_WORKER !== 'false') {
     }
   });
   logger.info('Social scheduler started (every 1 minute)');
+
+  // Sync WhatsApp Cloud templates every 6 hours
+  cron.schedule('0 */6 * * *', async () => {
+    const defaultOrgId = process.env.DEFAULT_ORG_ID;
+    if (!defaultOrgId) return;
+    try {
+      const result = await syncWhatsAppTemplates(defaultOrgId);
+      logger.info('Scheduled WhatsApp template sync complete', result);
+    } catch (err: unknown) {
+      const error = err as Error;
+      logger.error('Scheduled WhatsApp template sync error', { error: error.message });
+    }
+  });
+  logger.info('WhatsApp template sync scheduled (every 6 hours)');
 }
 
 // ─── Start Server ────────────────────────────────────────────────────────────

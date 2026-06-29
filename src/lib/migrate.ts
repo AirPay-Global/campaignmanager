@@ -541,6 +541,63 @@ CREATE INDEX IF NOT EXISTS idx_message_templates_org     ON message_templates(or
 CREATE INDEX IF NOT EXISTS idx_message_templates_channel ON message_templates(org_id, channel);
 `;
 
+const SQL_013 = `
+-- Extend outbound_messages with WhatsApp Cloud API fields
+ALTER TABLE outbound_messages ADD COLUMN IF NOT EXISTS template_language TEXT;
+ALTER TABLE outbound_messages ADD COLUMN IF NOT EXISTS meta_message_id   TEXT;
+ALTER TABLE outbound_messages ADD COLUMN IF NOT EXISTS delivered_at      TIMESTAMPTZ;
+ALTER TABLE outbound_messages ADD COLUMN IF NOT EXISTS read_at           TIMESTAMPTZ;
+ALTER TABLE outbound_messages ADD COLUMN IF NOT EXISTS failed_at         TIMESTAMPTZ;
+ALTER TABLE outbound_messages ADD COLUMN IF NOT EXISTS request_payload   JSONB;
+ALTER TABLE outbound_messages ADD COLUMN IF NOT EXISTS meta_response     JSONB;
+ALTER TABLE outbound_messages ADD COLUMN IF NOT EXISTS error_details     JSONB;
+
+CREATE INDEX IF NOT EXISTS idx_outbound_messages_meta_id ON outbound_messages(meta_message_id) WHERE meta_message_id IS NOT NULL;
+
+-- WhatsApp Cloud API templates synced from Meta
+CREATE TABLE IF NOT EXISTS whatsapp_cloud_templates (
+  id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  org_id           UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  meta_template_id TEXT NOT NULL,
+  name             TEXT NOT NULL,
+  language         TEXT NOT NULL,
+  category         TEXT NOT NULL,
+  status           TEXT NOT NULL,
+  quality_score    JSONB NOT NULL DEFAULT '{}',
+  components       JSONB NOT NULL DEFAULT '[]',
+  raw_meta_response JSONB NOT NULL DEFAULT '{}',
+  last_synced_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (org_id, meta_template_id, language)
+);
+
+DO $$ BEGIN
+  CREATE TRIGGER trg_whatsapp_cloud_templates_updated_at
+    BEFORE UPDATE ON whatsapp_cloud_templates FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER TABLE whatsapp_cloud_templates ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY wct_org ON whatsapp_cloud_templates FOR ALL TO authenticated USING (org_id = get_user_org_id()); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY wct_sr  ON whatsapp_cloud_templates FOR ALL TO service_role  USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE INDEX IF NOT EXISTS idx_wct_org_id   ON whatsapp_cloud_templates(org_id);
+CREATE INDEX IF NOT EXISTS idx_wct_org_name ON whatsapp_cloud_templates(org_id, name, language);
+
+-- Webhook raw payloads log (all incoming Meta webhooks stored before processing)
+CREATE TABLE IF NOT EXISTS webhook_logs (
+  id         UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  org_id     UUID REFERENCES organizations(id) ON DELETE SET NULL,
+  source     TEXT NOT NULL,
+  payload    JSONB NOT NULL DEFAULT '{}',
+  headers    JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_webhook_logs_source     ON webhook_logs(source, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_webhook_logs_created_at ON webhook_logs(created_at DESC);
+`;
+
 const MIGRATIONS = [
   { name: '001_initial_schema',     sql: SQL_001 },
   { name: '002_rls_policies',       sql: SQL_002 },
@@ -554,6 +611,7 @@ const MIGRATIONS = [
   { name: '010_ad_audiences',       sql: SQL_010 },
   { name: '011_social_posts',       sql: SQL_011 },
   { name: '012_message_templates',  sql: SQL_012 },
+  { name: '013_whatsapp_cloud',     sql: SQL_013 },
 ];
 
 export async function runMigrations(): Promise<void> {
