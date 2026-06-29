@@ -95,22 +95,24 @@ router.get('/messages', asyncHandler(async (req, res) => {
       .range(offset, offset + limit - 1),
   ]);
 
-  const outbound = (outboundRes.data ?? []).map((m: Record<string, unknown>) => ({ ...m, direction: 'outbound' }));
-  const inbound = (inboundRes.data ?? []).map((m: Record<string, unknown>) => ({
-    id: m.id,
-    recipient_id: m.sender_id,
-    sender_id: m.sender_id,
-    body: m.body,
-    external_id: m.external_id,
-    meta_message_id: m.external_id,
+  type MsgRow = Record<string, unknown> & { created_at: string; direction: string };
+
+  const outbound: MsgRow[] = (outboundRes.data ?? []).map((m: Record<string, unknown>) => ({ ...m, direction: 'outbound' } as MsgRow));
+  const inbound: MsgRow[] = (inboundRes.data ?? []).map((m: Record<string, unknown>) => ({
+    id: m['id'],
+    recipient_id: m['sender_id'],
+    sender_id: m['sender_id'],
+    body: m['body'],
+    external_id: m['external_id'],
+    meta_message_id: m['external_id'],
     status: 'received',
     direction: 'inbound',
-    created_at: m.created_at,
-    raw_payload: m.raw_payload,
-  }));
+    created_at: m['created_at'] as string,
+    raw_payload: m['raw_payload'],
+  } as MsgRow));
 
   const combined = [...outbound, ...inbound].sort(
-    (a, b) => new Date(b.created_at as string).getTime() - new Date(a.created_at as string).getTime(),
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
   );
 
   res.json({ data: combined.slice(0, limit) });
