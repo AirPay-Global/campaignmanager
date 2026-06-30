@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Plus, Play, Pause, BarChart2, Loader2, X, Megaphone, Mail, Send,
   CheckCircle2, Eye, MousePointerClick, AlertCircle, Copy, Bookmark, LayoutTemplate,
-  FlaskConical, Trophy,
+  FlaskConical, Trophy, MessageCircle, RefreshCw,
 } from 'lucide-react';
 import api from '../lib/api';
 import { ToastContainer, useToast } from '../components/Toast';
@@ -36,6 +36,14 @@ const defaultForm: FormState = {
   message_body: '', template_name: '', subject: '', scheduled_at: '',
 };
 const CHANNELS = ['whatsapp', 'sms', 'email'];
+
+// ─── Meta WhatsApp Template type ─────────────────────────────────────────────
+
+interface MetaWaTemplate {
+  id: string; name: string; language: string; category: string; status: string;
+  waba_name: string | null; account_id: string | null;
+  components: { type: string; text?: string; format?: string; buttons?: { type: string; text: string }[] }[];
+}
 
 // ─── Built-in Templates ───────────────────────────────────────────────────────
 
@@ -281,6 +289,69 @@ function TemplateCard({
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Meta WhatsApp Template Card ─────────────────────────────────────────────
+
+function MetaTemplateCard({ tpl, onUse }: { tpl: MetaWaTemplate; onUse: () => void }) {
+  const bodyText = tpl.components.find(c => c.type === 'BODY')?.text ?? '';
+  const headerComp = tpl.components.find(c => c.type === 'HEADER');
+  const buttons = tpl.components.find(c => c.type === 'BUTTONS')?.buttons ?? [];
+  const categoryColors: Record<string, { bg: string; text: string }> = {
+    MARKETING:      { bg: 'rgba(139,92,246,0.12)',  text: '#c084fc' },
+    UTILITY:        { bg: 'rgba(56,189,248,0.1)',   text: '#38bdf8' },
+    AUTHENTICATION: { bg: 'rgba(245,158,11,0.1)',   text: '#fbbf24' },
+  };
+  const cc = categoryColors[tpl.category] ?? { bg: 'rgba(255,255,255,0.06)', text: 'rgba(255,255,255,0.4)' };
+
+  return (
+    <div
+      style={{ background: 'rgba(37,211,102,0.03)', border: '1px solid rgba(37,211,102,0.1)', borderRadius: 12, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10, transition: 'border-color 0.2s', cursor: 'default' }}
+      onMouseEnter={e => (e.currentTarget.style.borderColor = 'rgba(37,211,102,0.22)')}
+      onMouseLeave={e => (e.currentTarget.style.borderColor = 'rgba(37,211,102,0.1)')}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <MessageCircle size={15} color="rgba(37,211,102,0.7)" />
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>{tpl.name}</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 1 }}>
+              {tpl.language}{tpl.waba_name ? ` · ${tpl.waba_name}` : ''}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+          <span style={{ flexShrink: 0, fontSize: 10, padding: '2px 7px', borderRadius: 5, background: 'rgba(37,211,102,0.1)', color: '#25d366', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>WhatsApp</span>
+          <span style={{ flexShrink: 0, fontSize: 10, padding: '2px 7px', borderRadius: 5, background: cc.bg, color: cc.text, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{tpl.category}</span>
+        </div>
+      </div>
+
+      {/* Message bubble preview */}
+      <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: 8, overflow: 'hidden', fontSize: 11 }}>
+        {headerComp && (
+          <div style={{ padding: '6px 10px', borderBottom: '1px solid rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.5)', fontWeight: 600 }}>
+            {headerComp.format === 'IMAGE' ? '🖼 Image' : headerComp.format === 'VIDEO' ? '🎬 Video' : headerComp.format === 'DOCUMENT' ? '📄 Document' : headerComp.text ?? ''}
+          </div>
+        )}
+        <div style={{ padding: '7px 10px', color: 'rgba(255,255,255,0.55)', lineHeight: 1.5, maxHeight: 56, overflow: 'hidden', fontFamily: 'monospace' }}>
+          {bodyText.slice(0, 130)}{bodyText.length > 130 ? '…' : ''}
+        </div>
+        {buttons.length > 0 && (
+          <div style={{ padding: '5px 10px', borderTop: '1px solid rgba(255,255,255,0.04)', color: 'rgba(37,211,102,0.6)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {buttons.slice(0, 2).map((b, i) => <span key={i} style={{ fontSize: 10 }}>{b.text}</span>)}
+            {buttons.length > 2 && <span style={{ fontSize: 10, opacity: 0.4 }}>+{buttons.length - 2} more</span>}
+          </div>
+        )}
+      </div>
+
+      <button onClick={onUse} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px', borderRadius: 8, background: 'rgba(37,211,102,0.1)', border: '1px solid rgba(37,211,102,0.25)', color: '#25d366', cursor: 'pointer', fontSize: 12, fontWeight: 600, transition: 'all 0.15s' }}
+        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(37,211,102,0.18)')}
+        onMouseLeave={e => (e.currentTarget.style.background = 'rgba(37,211,102,0.1)')}
+      >
+        <Plus size={11} /> Use in Campaign Builder
+      </button>
     </div>
   );
 }
@@ -565,6 +636,14 @@ export default function Campaigns() {
   });
   const savedTemplates: Campaign[] = tmplData?.data ?? [];
 
+  const { data: metaTemplatesData, isLoading: metaTemplatesLoading, refetch: refetchMetaTemplates } = useQuery({
+    queryKey: ['wa-cloud-templates-campaigns'],
+    queryFn: () => api.get('/whatsapp-cloud/templates', { params: { status: 'APPROVED' } }).then(r => r.data.data as MetaWaTemplate[]),
+    enabled: activeTab === 'templates',
+    staleTime: 120_000,
+  });
+  const metaTemplates: MetaWaTemplate[] = metaTemplatesData ?? [];
+
   const { data: segmentsData } = useQuery<SegmentsResponse>({
     queryKey: ['segments'],
     queryFn: () => api.get('/segments').then(r => r.data),
@@ -817,6 +896,53 @@ export default function Campaigns() {
                 </div>
               </div>
             )}
+
+            {/* Meta WhatsApp Templates */}
+            <div style={{ marginBottom: 32 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>WhatsApp Templates from Meta</div>
+                  {metaTemplates.length > 0 && (
+                    <span style={{ fontSize: 11, padding: '2px 7px', borderRadius: 5, background: 'rgba(37,211,102,0.1)', color: '#25d366', fontWeight: 600 }}>{metaTemplates.length}</span>
+                  )}
+                </div>
+                <button
+                  onClick={() => refetchMetaTemplates()}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.3)', fontSize: 12 }}
+                >
+                  <RefreshCw size={11} className={metaTemplatesLoading ? 'animate-spin-slow' : ''} /> Refresh
+                </button>
+              </div>
+              {metaTemplatesLoading ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+                  {[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 160, borderRadius: 12 }} />)}
+                </div>
+              ) : metaTemplates.length === 0 ? (
+                <div style={{ padding: '28px 20px', textAlign: 'center', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 12 }}>
+                  <MessageCircle size={22} color="rgba(37,211,102,0.3)" style={{ marginBottom: 8 }} />
+                  <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.3)' }}>No approved WhatsApp templates found.</div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', marginTop: 4 }}>Go to the WhatsApp page to add an account and sync templates from Meta.</div>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 14 }}>
+                  {metaTemplates.map(t => (
+                    <MetaTemplateCard
+                      key={t.id}
+                      tpl={t}
+                      onUse={() => navigate('/campaigns/builder', {
+                        state: {
+                          channel: 'whatsapp',
+                          templateId: t.id,
+                          templateName: t.name,
+                          templateLanguage: t.language,
+                          accountId: t.account_id,
+                        },
+                      })}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Built-in templates */}
             <div>
