@@ -68,8 +68,7 @@ function remainingCustomFields(schema: string[], fieldMappings: Record<string, s
 
 // ─── Import Wizard modal ──────────────────────────────────────────────────────
 
-function ImportSegmentModal({ onClose, onImported }: { onClose: () => void; onImported: () => void }) {
-  const { addToast } = useToast();
+function ImportSegmentModal({ onClose, onImported, addToast }: { onClose: () => void; onImported: () => void; addToast: (type: 'success' | 'error', message: string) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Wizard state
@@ -694,6 +693,7 @@ export default function Segments() {
         <ImportSegmentModal
           onClose={() => setShowImportModal(false)}
           onImported={() => qc.invalidateQueries({ queryKey: ['imported-segments'] })}
+          addToast={addToast}
         />
       )}
 
