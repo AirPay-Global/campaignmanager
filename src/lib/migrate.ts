@@ -634,6 +634,45 @@ CREATE INDEX IF NOT EXISTS idx_wct_waba_id    ON whatsapp_cloud_templates(org_id
 CREATE INDEX IF NOT EXISTS idx_wct_account_id ON whatsapp_cloud_templates(account_id);
 `;
 
+const SQL_015 = `
+-- Imported segments from external business applications
+CREATE TABLE IF NOT EXISTS imported_segments (
+  id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  org_id                UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  name                  TEXT NOT NULL,
+  source_app            TEXT,            -- e.g. "AirPay HealthTech"
+  -- Maps standard field names → source JSON field paths
+  -- Standard keys: name, first_name, last_name, phone, email, whatsapp
+  field_mappings        JSONB NOT NULL DEFAULT '{}',
+  -- Maps arbitrary custom names → source JSON field paths
+  -- e.g. {"pharmacy_name": "pharmacyName", "city": "city"}
+  custom_field_mappings JSONB NOT NULL DEFAULT '{}',
+  -- Detected top-level field names from the imported JSON
+  raw_schema            JSONB NOT NULL DEFAULT '[]',
+  -- Source metadata key (e.g. "members") and path for total count
+  members_key           TEXT NOT NULL DEFAULT 'members',
+  -- The actual member records (stored as JSONB array)
+  members               JSONB NOT NULL DEFAULT '[]',
+  total_members         INTEGER NOT NULL DEFAULT 0,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DO $$ BEGIN
+  CREATE TRIGGER trg_imported_segments_updated_at
+    BEFORE UPDATE ON imported_segments FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER TABLE imported_segments ENABLE ROW LEVEL SECURITY;
+DO $$ BEGIN CREATE POLICY imported_seg_org ON imported_segments FOR ALL TO authenticated USING (org_id = get_user_org_id()); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE POLICY imported_seg_sr  ON imported_segments FOR ALL TO service_role  USING (true) WITH CHECK (true); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE INDEX IF NOT EXISTS idx_imported_segments_org ON imported_segments(org_id, created_at DESC);
+
+-- Allow campaigns to reference an imported segment
+ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS imported_segment_id UUID REFERENCES imported_segments(id) ON DELETE SET NULL;
+`;
+
 const MIGRATIONS = [
   { name: '001_initial_schema',     sql: SQL_001 },
   { name: '002_rls_policies',       sql: SQL_002 },
@@ -649,6 +688,7 @@ const MIGRATIONS = [
   { name: '012_message_templates',  sql: SQL_012 },
   { name: '013_whatsapp_cloud',     sql: SQL_013 },
   { name: '014_whatsapp_accounts',  sql: SQL_014 },
+  { name: '015_imported_segments',  sql: SQL_015 },
 ];
 
 export async function runMigrations(): Promise<void> {
