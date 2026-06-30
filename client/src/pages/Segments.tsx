@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, X, Trash2, Users, Filter, Loader2, Upload, ChevronDown, ArrowRight, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Plus, X, Trash2, Users, Filter, Loader2, Upload, ChevronDown, ArrowRight, CheckCircle2 } from 'lucide-react';
 import api from '../lib/api';
 import { ToastContainer, useToast } from '../components/Toast';
 
