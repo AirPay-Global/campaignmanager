@@ -388,7 +388,6 @@ export default function Segments() {
   const { data: importedData, isLoading: importedLoading } = useQuery({
     queryKey: ['imported-segments'],
     queryFn: () => api.get('/imported-segments').then(r => r.data.data as ImportedSegment[]),
-    enabled: activeTab === 'imported',
   });
   const importedSegments: ImportedSegment[] = importedData ?? [];
 
@@ -692,7 +691,7 @@ export default function Segments() {
       {showImportModal && (
         <ImportSegmentModal
           onClose={() => setShowImportModal(false)}
-          onImported={() => qc.invalidateQueries({ queryKey: ['imported-segments'] })}
+          onImported={() => qc.refetchQueries({ queryKey: ['imported-segments'] })}
           addToast={addToast}
         />
       )}
