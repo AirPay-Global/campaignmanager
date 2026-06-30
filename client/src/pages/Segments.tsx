@@ -68,7 +68,8 @@ function remainingCustomFields(schema: string[], fieldMappings: Record<string, s
 
 // ─── Import Wizard modal ──────────────────────────────────────────────────────
 
-function ImportSegmentModal({ onClose, onImported, addToast }: { onClose: () => void; onImported: () => void; addToast: (type: 'success' | 'error', message: string) => void }) {
+function ImportSegmentModal({ onClose, addToast }: { onClose: () => void; addToast: (type: 'success' | 'error', message: string) => void }) {
+  const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Wizard state
@@ -85,9 +86,9 @@ function ImportSegmentModal({ onClose, onImported, addToast }: { onClose: () => 
 
   const importMutation = useMutation({
     mutationFn: (payload: object) => api.post('/imported-segments', payload),
-    onSuccess: () => {
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['imported-segments'] });
       addToast('success', 'Segment imported successfully.');
-      onImported();
       onClose();
     },
     onError: (err: unknown) =>
@@ -691,7 +692,6 @@ export default function Segments() {
       {showImportModal && (
         <ImportSegmentModal
           onClose={() => setShowImportModal(false)}
-          onImported={() => qc.refetchQueries({ queryKey: ['imported-segments'] })}
           addToast={addToast}
         />
       )}
