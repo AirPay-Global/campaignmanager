@@ -22,6 +22,12 @@ import { useBusinessAccount } from '../contexts/BusinessAccountContext';
 
 interface Segment { id: string; name: string; }
 interface SegmentsResponse { data: Segment[]; }
+interface ImportedSegment { id: string; name: string; source_app: string | null; total_members: number; custom_field_mappings: Record<string, string>; }
+interface ImportedSegmentsResponse { data: ImportedSegment[]; }
+
+// Audience selection — either a standard segment, imported segment, or all contacts
+type AudienceType = 'all' | 'segment' | 'imported';
+interface AudienceSelection { type: AudienceType; id: string; }
 
 interface WaAccount { id: string; name: string; waba_id: string; phone_number_id: string; is_active: boolean; }
 interface CloudTemplate {
@@ -86,25 +92,16 @@ function getBodyText(components: TemplateComponent[]): string {
   return components.find(c => c.type === 'BODY')?.text ?? '';
 }
 
-function previewTemplateBody(bodyText: string, varMap: Record<string, string>): string {
-  return bodyText.replace(/\{\{(\d+)\}\}/g, (_, n: string) => {
-    const val = varMap[n];
-    if (!val) return `{{${n}}}`;
-    // Show label if it's a contact field, else the literal
-    const field = CONTACT_FIELDS.find(f => f.value === val);
-    return field ? `[${field.label}]` : val;
-  });
-}
-
 // ─── WhatsApp builder panel ────────────────────────────────────────────────────
 
 function WhatsAppBuilder({
-  accounts, segmentId, setSegmentId, segments, scheduledAt, setScheduledAt,
+  accounts, audience, setAudience, segments, importedSegments, scheduledAt, setScheduledAt,
   onSend, isPending, initialAccountId, initialTemplateId,
 }: {
   accounts: WaAccount[];
-  segmentId: string; setSegmentId: (v: string) => void;
+  audience: AudienceSelection; setAudience: (v: AudienceSelection) => void;
   segments: Segment[];
+  importedSegments: ImportedSegment[];
   scheduledAt: string; setScheduledAt: (v: string) => void;
   onSend: (payload: object) => void;
   isPending: boolean;
@@ -115,6 +112,15 @@ function WhatsAppBuilder({
   const [accountId, setAccountId] = useState(initialAccountId ?? globalAccountId ?? accounts[0]?.id ?? '');
   const [templateId, setTemplateId] = useState(initialTemplateId ?? '');
   const [varMap, setVarMap] = useState<Record<string, string>>({});
+
+  // Fetch custom field aliases from selected imported segment
+  const selectedImportedSeg = audience.type === 'imported'
+    ? importedSegments.find(s => s.id === audience.id)
+    : null;
+  const customFields = selectedImportedSeg
+    ? Object.keys(selectedImportedSeg.custom_field_mappings).map(alias => ({ value: `{{${alias}}}`, label: alias }))
+    : [];
+  const allContactFields = [...CONTACT_FIELDS, ...customFields];
 
   const { data: templatesData, isFetching: loadingTemplates, refetch } = useQuery({
     queryKey: ['wa-cloud-templates-builder', accountId],
@@ -131,7 +137,12 @@ function WhatsAppBuilder({
   const selectedTemplate = filteredTemplates.find(t => t.id === templateId) ?? null;
   const placeholders = selectedTemplate ? extractPlaceholders(selectedTemplate.components) : [];
   const bodyText = selectedTemplate ? getBodyText(selectedTemplate.components) : '';
-  const previewText = selectedTemplate ? previewTemplateBody(bodyText, varMap) : '';
+  const previewText = selectedTemplate ? bodyText.replace(/\{\{(\d+)\}\}/g, (_, n: string) => {
+    const val = varMap[n];
+    if (!val) return `{{${n}}}`;
+    const field = allContactFields.find(f => f.value === val);
+    return field ? `[${field.label}]` : val;
+  }) : '';
   const headerComp = selectedTemplate?.components.find(c => c.type === 'HEADER');
   const footerComp = selectedTemplate?.components.find(c => c.type === 'FOOTER');
   const buttons = selectedTemplate?.components.find(c => c.type === 'BUTTONS')?.buttons ?? [];
@@ -144,6 +155,11 @@ function WhatsAppBuilder({
   const handleSend = () => {
     if (!selectedTemplate) return;
     const template_vars: Record<string, string> = { ...varMap };
+    const audienceField = audience.type === 'segment'
+      ? { segment_id: audience.id }
+      : audience.type === 'imported'
+        ? { imported_segment_id: audience.id }
+        : {};
     onSend({
       channel: 'whatsapp',
       template_name: selectedTemplate.name,
@@ -152,6 +168,7 @@ function WhatsAppBuilder({
         wa_language: selectedTemplate.language,
         wa_account_id: accountId || null,
       },
+      ...audienceField,
     });
   };
 
@@ -213,11 +230,13 @@ function WhatsAppBuilder({
                       >
                         <option value="">— select field —</option>
                         {CONTACT_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                        {customFields.length > 0 && <option disabled>─── Segment Fields ───</option>}
+                        {customFields.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
                         <option value="__custom__" disabled>─── or type literal below ───</option>
                       </select>
                     </div>
                     {/* Allow literal override */}
-                    {varMap[String(n)] === undefined || !CONTACT_FIELDS.some(f => f.value === varMap[String(n)]) ? (
+                    {varMap[String(n)] === undefined || !allContactFields.some(f => f.value === varMap[String(n)]) ? (
                       <input
                         value={varMap[String(n)] ?? ''}
                         onChange={e => setVarMap(v => ({ ...v, [String(n)]: e.target.value }))}
@@ -237,11 +256,31 @@ function WhatsAppBuilder({
             <span className="chrome-label">Audience</span>
             <div style={{ position: 'relative' }}>
               <ChevronDown size={12} color="rgba(255,255,255,0.3)" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-              <select value={segmentId} onChange={e => setSegmentId(e.target.value)} className="select-glass" style={{ paddingRight: 30 }}>
+              <select
+                value={audience.type === 'all' ? '' : `${audience.type}:${audience.id}`}
+                onChange={e => {
+                  const v = e.target.value;
+                  if (!v) setAudience({ type: 'all', id: '' });
+                  else {
+                    const [type, id] = v.split(':');
+                    setAudience({ type: type as AudienceType, id });
+                  }
+                }}
+                className="select-glass"
+                style={{ paddingRight: 30 }}
+              >
                 <option value="">All Contacts</option>
-                {segments.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {segments.length > 0 && <option disabled>─── Audience Segments ───</option>}
+                {segments.map(s => <option key={s.id} value={`segment:${s.id}`}>{s.name}</option>)}
+                {importedSegments.length > 0 && <option disabled>─── Imported Segments ───</option>}
+                {importedSegments.map(s => <option key={s.id} value={`imported:${s.id}`}>{s.name}{s.source_app ? ` (${s.source_app})` : ''} · {s.total_members} members</option>)}
               </select>
             </div>
+            {selectedImportedSeg && customFields.length > 0 && (
+              <div style={{ marginTop: 8, padding: '8px 10px', borderRadius: 8, background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.15)', fontSize: 11, color: 'rgba(255,255,255,0.45)', lineHeight: 1.5 }}>
+                Custom fields available: {customFields.map(f => <span key={f.value} style={{ color: '#818cf8', marginRight: 4 }}>{f.value}</span>)}
+              </div>
+            )}
           </div>
         </div>
 
@@ -329,7 +368,7 @@ function WhatsAppBuilder({
                   <div style={{ fontSize: 11, fontWeight: 600, color: '#818cf8', marginBottom: 6, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Variable Mapping</div>
                   {placeholders.map(n => {
                     const val = varMap[String(n)];
-                    const field = CONTACT_FIELDS.find(f => f.value === val);
+                    const field = allContactFields.find(f => f.value === val);
                     return (
                       <div key={n} style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 3 }}>
                         <span style={{ color: '#818cf8' }}>{'{{' + n + '}}'}</span>
@@ -367,7 +406,7 @@ export default function CampaignBuilder() {
 
   // Shared form state
   const [name, setName] = useState('');
-  const [segmentId, setSegmentId] = useState('');
+  const [audience, setAudience] = useState<AudienceSelection>({ type: 'all', id: '' });
   const [scheduledAt, setScheduledAt] = useState('');
 
   // Email-only state
@@ -385,6 +424,12 @@ export default function CampaignBuilder() {
     queryFn: () => api.get('/segments').then(r => r.data),
   });
   const segments = segmentsData?.data ?? [];
+
+  const { data: importedSegmentsData } = useQuery<ImportedSegmentsResponse>({
+    queryKey: ['imported-segments'],
+    queryFn: () => api.get('/imported-segments').then(r => r.data),
+  });
+  const importedSegments = importedSegmentsData?.data ?? [];
 
   const { data: waAccountsData } = useQuery({
     queryKey: ['wa-cloud-accounts'],
@@ -440,13 +485,14 @@ export default function CampaignBuilder() {
     const html = editor?.getHTML() ?? '';
     if (!html || html === '<p></p>') { addToast('error', 'Email body cannot be empty.'); return; }
 
+    const audienceField = audience.type === 'segment' ? { segment_id: audience.id } : {};
     createMutation.mutate({
       name,
       channel: 'email',
       subject,
       from_name: fromName,
       message_body: wrapInEmailTemplate(subject, fromName, html),
-      ...(segmentId ? { segment_id: segmentId } : {}),
+      ...audienceField,
       ...(scheduledAt ? { scheduled_at: new Date(scheduledAt).toISOString() } : {}),
     });
   };
@@ -456,7 +502,6 @@ export default function CampaignBuilder() {
     createMutation.mutate({
       name,
       ...waPayload,
-      ...(segmentId ? { segment_id: segmentId } : {}),
       ...(scheduledAt ? { scheduled_at: new Date(scheduledAt).toISOString() } : {}),
     });
   };
@@ -545,8 +590,9 @@ export default function CampaignBuilder() {
           ) : (
             <WhatsAppBuilder
               accounts={waAccounts}
-              segmentId={segmentId} setSegmentId={setSegmentId}
+              audience={audience} setAudience={setAudience}
               segments={segments}
+              importedSegments={importedSegments}
               scheduledAt={scheduledAt} setScheduledAt={setScheduledAt}
               onSend={handleWhatsAppSend}
               isPending={createMutation.isPending}
@@ -573,9 +619,19 @@ export default function CampaignBuilder() {
                   <span className="chrome-label">Audience</span>
                   <div style={{ position: 'relative' }}>
                     <ChevronDown size={12} color="rgba(255,255,255,0.3)" style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-                    <select value={segmentId} onChange={e => setSegmentId(e.target.value)} className="select-glass" style={{ paddingRight: 30 }}>
+                    <select
+                      value={audience.type === 'all' ? '' : `${audience.type}:${audience.id}`}
+                      onChange={e => {
+                        const v = e.target.value;
+                        if (!v) setAudience({ type: 'all', id: '' });
+                        else { const [type, id] = v.split(':'); setAudience({ type: type as AudienceType, id }); }
+                      }}
+                      className="select-glass"
+                      style={{ paddingRight: 30 }}
+                    >
                       <option value="">All Contacts</option>
-                      {segments.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      {segments.length > 0 && <option disabled>─── Audience Segments ───</option>}
+                      {segments.map(s => <option key={s.id} value={`segment:${s.id}`}>{s.name}</option>)}
                     </select>
                   </div>
                 </div>

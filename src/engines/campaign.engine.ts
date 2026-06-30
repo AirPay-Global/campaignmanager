@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import { logger } from '../lib/logger';
 import { segmentService } from '../services/segment.service';
 import { auditService } from '../services/audit.service';
+import { resolveImportedMember } from '../routes/imported-segments.routes';
 
 type ChannelType = 'whatsapp' | 'sms' | 'email' | 'push';
 
@@ -12,6 +13,7 @@ interface Campaign {
   channel: ChannelType;
   status: string;
   segment_id: string | null;
+  imported_segment_id: string | null;
   template_name: string | null;
   template_vars: Record<string, string>;
   message_body: string | null;
@@ -22,6 +24,13 @@ interface Campaign {
   created_by: string | null;
   ab_test_id: string | null;
   ab_variant_label: string | null;
+}
+
+interface ImportedSegmentRow {
+  id: string;
+  field_mappings: Record<string, string>;
+  custom_field_mappings: Record<string, string>;
+  members: Record<string, unknown>[];
 }
 
 interface Contact {
@@ -35,6 +44,71 @@ interface Contact {
 }
 
 class CampaignEngine {
+  async launchWithImportedSegment(campaign: Campaign, seg: ImportedSegmentRow, userId?: string): Promise<number> {
+    let enqueued = 0;
+    const meta = campaign.metadata as Record<string, unknown>;
+    const waLang = typeof meta.wa_language === 'string' ? meta.wa_language : undefined;
+    const waAccountId = typeof meta.wa_account_id === 'string' ? meta.wa_account_id : undefined;
+
+    for (const rawMember of seg.members) {
+      const { std, custom } = resolveImportedMember(rawMember, seg.field_mappings, seg.custom_field_mappings);
+
+      // Determine recipient based on channel
+      const recipientId = campaign.channel === 'whatsapp'
+        ? (std.whatsapp ?? std.phone ?? null)
+        : campaign.channel === 'email'
+          ? (std.email ?? null)
+          : (std.phone ?? null);
+
+      if (!recipientId) continue;
+
+      // Build template_vars: resolve campaign template_vars using member fields
+      const contactFields: Record<string, string> = {
+        ...std,
+        first_name: std.first_name ?? (std.name ?? '').split(' ')[0],
+        ...custom,
+      };
+      if (waLang) contactFields['__lang'] = waLang;
+      if (waAccountId) contactFields['__account_id'] = waAccountId;
+
+      const templateVars: Record<string, string> = {};
+      for (const [k, v] of Object.entries(campaign.template_vars ?? {})) {
+        templateVars[k] = v.replace(/\{\{(\w+)\}\}/g, (_: string, field: string) =>
+          contactFields[field] ?? `{{${field}}}`,
+        );
+      }
+      // Also pass all contact fields so queue engine can use them
+      for (const [k, v] of Object.entries(contactFields)) {
+        if (!(k in templateVars)) templateVars[k] = v;
+      }
+
+      const scheduledAt = campaign.scheduled_at
+        ? this.calculateScheduledAt(campaign.scheduled_at, enqueued)
+        : null;
+
+      const { error } = await supabase.from('campaign_messages').insert({
+        campaign_id: campaign.id,
+        contact_id: null,
+        org_id: campaign.org_id,
+        channel: campaign.channel,
+        recipient_id: recipientId,
+        template_vars: templateVars,
+        status: 'pending',
+        scheduled_at: scheduledAt,
+      });
+
+      if (!error) {
+        enqueued++;
+      } else {
+        logger.warn('Failed to create campaign message from imported segment', {
+          campaignId: campaign.id,
+          error: error.message,
+        });
+      }
+    }
+    return enqueued;
+  }
+
   async launch(campaignId: string, userId?: string): Promise<{ enqueued: number }> {
     const { data: campaign, error: campaignError } = await supabase
       .from('campaigns')
@@ -65,15 +139,23 @@ class CampaignEngine {
 
     logger.info('Campaign launching', { campaignId, channel: c.channel });
 
-    const contacts = await this.resolveAudience(c.org_id, c.segment_id, c.channel);
-    const enqueued = await this.createMessagesForContacts(c, contacts);
+    let enqueued: number;
+    if (c.imported_segment_id) {
+      const { data: seg, error: segErr } = await supabase
+        .from('imported_segments')
+        .select('id, field_mappings, custom_field_mappings, members')
+        .eq('id', c.imported_segment_id)
+        .eq('org_id', c.org_id)
+        .single();
+      if (segErr || !seg) throw new Error('Imported segment not found');
+      enqueued = await this.launchWithImportedSegment(c, seg as ImportedSegmentRow, userId);
+    } else {
+      const contacts = await this.resolveAudience(c.org_id, c.segment_id, c.channel);
+      enqueued = await this.createMessagesForContacts(c, contacts);
+    }
 
     logger.info('Campaign messages enqueued', { campaignId, enqueued });
-
-    await auditService.log(c.org_id, userId ?? null, 'campaign.launched', 'campaign', campaignId, {
-      enqueued,
-    });
-
+    await auditService.log(c.org_id, userId ?? null, 'campaign.launched', 'campaign', campaignId, { enqueued });
     return { enqueued };
   }
 

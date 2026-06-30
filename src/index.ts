@@ -32,6 +32,7 @@ import messageTemplateRoutes from './routes/message-templates.routes';
 import agentRoutes from './routes/agent.routes';
 import testRoutes from './routes/test.routes';
 import whatsappCloudRoutes from './routes/whatsapp-cloud.routes';
+import importedSegmentsRoutes from './routes/imported-segments.routes';
 import { syncWhatsAppTemplates } from './services/whatsapp-cloud.service';
 
 const app = express();
@@ -95,6 +96,7 @@ app.use('/api/v1/message-templates', messageTemplateRoutes);
 app.use('/api/v1/agent', agentRoutes);
 app.use('/api/v1/test', testRoutes);
 app.use('/api/v1/whatsapp-cloud', whatsappCloudRoutes);
+app.use('/api/v1/imported-segments', importedSegmentsRoutes);
 
 // ─── Serve React Client ──────────────────────────────────────────────────────
 const clientDist = path.join(__dirname, '../client/dist');
