@@ -386,9 +386,14 @@ export default function Segments() {
   });
   const segments: Segment[] = data?.data ?? [];
 
-  const { data: importedData, isLoading: importedLoading } = useQuery({
+  const { data: importedData, isLoading: importedLoading, error: importedError } = useQuery({
     queryKey: ['imported-segments'],
-    queryFn: () => api.get('/imported-segments').then(r => r.data.data as ImportedSegment[]),
+    queryFn: async () => {
+      const r = await api.get('/imported-segments');
+      const rows = r.data?.data;
+      return (Array.isArray(rows) ? rows : []) as ImportedSegment[];
+    },
+    staleTime: 0,
   });
   const importedSegments: ImportedSegment[] = importedData ?? [];
 
@@ -552,6 +557,12 @@ export default function Segments() {
         {/* ── Imported Segments Tab ── */}
         {activeTab === 'imported' && (
           <div className="animate-fade-in-up stagger-2">
+            {importedError && (
+              <div style={{ marginBottom: 14, padding: '12px 16px', borderRadius: 10, background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <AlertTriangle size={14} />
+                {(importedError as { response?: { data?: { message?: string } } })?.response?.data?.message ?? (importedError as Error).message ?? 'Failed to load imported segments'}
+              </div>
+            )}
             {importedLoading ? (
               <div className="glass" style={{ padding: 40, display: 'flex', flexDirection: 'column', gap: 14 }}>
                 {[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 60, borderRadius: 10 }} />)}
@@ -575,53 +586,61 @@ export default function Segments() {
                     </tr>
                   </thead>
                   <tbody>
-                    {importedSegments.map(s => (
-                      <tr key={s.id}>
-                        <td>
-                          <div style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 500 }}>{s.name}</div>
-                          <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>{s.raw_schema.length} source fields</div>
-                        </td>
-                        <td>
-                          {s.source_app
-                            ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 5, background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', color: '#a5b4fc' }}>{s.source_app}</span>
-                            : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>—</span>}
-                        </td>
-                        <td>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 20, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', fontSize: 12, fontWeight: 600, color: '#4ade80' }}>
-                            <Users size={11} />{s.total_members}
-                          </span>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                            {Object.keys(s.field_mappings).map(k => (
-                              <span key={k} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.45)' }}>
-                                {k} ← {s.field_mappings[k]}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td>
-                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                            {Object.keys(s.custom_field_mappings).length === 0
-                              ? <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>—</span>
-                              : Object.keys(s.custom_field_mappings).map(k => (
-                                <span key={k} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.15)', color: '#a5b4fc' }}>
-                                  {'{{'}{k}{'}}'}
-                                </span>
-                              ))
-                            }
-                          </div>
-                        </td>
-                        <td style={{ color: 'rgba(255,255,255,0.3)' }}>{new Date(s.created_at).toLocaleDateString()}</td>
-                        <td>
-                          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                            <button onClick={() => deleteImportedMutation.mutate(s.id)} disabled={deleteImportedMutation.isPending} style={{ padding: '5px 8px', borderRadius: 7, background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
+                    {importedSegments.map(s => {
+                      const fieldMappings = s.field_mappings ?? {};
+                      const customMappings = s.custom_field_mappings ?? {};
+                      const schema = Array.isArray(s.raw_schema) ? s.raw_schema : [];
+                      return (
+                        <tr key={s.id}>
+                          <td>
+                            <div style={{ color: 'rgba(255,255,255,0.85)', fontWeight: 500 }}>{s.name}</div>
+                            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', marginTop: 2 }}>{schema.length} source fields</div>
+                          </td>
+                          <td>
+                            {s.source_app
+                              ? <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 5, background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.2)', color: '#a5b4fc' }}>{s.source_app}</span>
+                              : <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 12 }}>—</span>}
+                          </td>
+                          <td>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 20, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', fontSize: 12, fontWeight: 600, color: '#4ade80' }}>
+                              <Users size={11} />{s.total_members}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                              {Object.keys(fieldMappings).length === 0
+                                ? <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>—</span>
+                                : Object.keys(fieldMappings).map(k => (
+                                  <span key={k} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.45)' }}>
+                                    {k} ← {fieldMappings[k]}
+                                  </span>
+                                ))
+                              }
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                              {Object.keys(customMappings).length === 0
+                                ? <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>—</span>
+                                : Object.keys(customMappings).map(k => (
+                                  <span key={k} style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.15)', color: '#a5b4fc' }}>
+                                    {'{{'}{k}{'}}'}
+                                  </span>
+                                ))
+                              }
+                            </div>
+                          </td>
+                          <td style={{ color: 'rgba(255,255,255,0.3)' }}>{new Date(s.created_at).toLocaleDateString()}</td>
+                          <td>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                              <button onClick={() => deleteImportedMutation.mutate(s.id)} disabled={deleteImportedMutation.isPending} style={{ padding: '5px 8px', borderRadius: 7, background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', color: '#f87171', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
