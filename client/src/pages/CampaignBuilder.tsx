@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -100,7 +100,7 @@ function previewTemplateBody(bodyText: string, varMap: Record<string, string>): 
 
 function WhatsAppBuilder({
   accounts, segmentId, setSegmentId, segments, scheduledAt, setScheduledAt,
-  onSend, isPending,
+  onSend, isPending, initialAccountId, initialTemplateId,
 }: {
   accounts: WaAccount[];
   segmentId: string; setSegmentId: (v: string) => void;
@@ -108,10 +108,12 @@ function WhatsAppBuilder({
   scheduledAt: string; setScheduledAt: (v: string) => void;
   onSend: (payload: object) => void;
   isPending: boolean;
+  initialAccountId?: string;
+  initialTemplateId?: string;
 }) {
   const { selectedId: globalAccountId } = useBusinessAccount();
-  const [accountId, setAccountId] = useState(globalAccountId ?? accounts[0]?.id ?? '');
-  const [templateId, setTemplateId] = useState('');
+  const [accountId, setAccountId] = useState(initialAccountId ?? globalAccountId ?? accounts[0]?.id ?? '');
+  const [templateId, setTemplateId] = useState(initialTemplateId ?? '');
   const [varMap, setVarMap] = useState<Record<string, string>>({});
 
   const { data: templatesData, isFetching: loadingTemplates, refetch } = useQuery({
@@ -348,12 +350,20 @@ function WhatsAppBuilder({
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 
+interface BuilderLocationState {
+  channel?: 'email' | 'whatsapp';
+  templateId?: string;
+  accountId?: string;
+}
+
 export default function CampaignBuilder() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const locationState = (location.state ?? {}) as BuilderLocationState;
   const { toasts, addToast, dismissToast } = useToast();
 
-  // Channel state
-  const [channel, setChannel] = useState<'email' | 'whatsapp'>('email');
+  // Channel state — pre-select from navigation state when coming from Templates tab
+  const [channel, setChannel] = useState<'email' | 'whatsapp'>(locationState.channel ?? 'email');
 
   // Shared form state
   const [name, setName] = useState('');
@@ -540,6 +550,8 @@ export default function CampaignBuilder() {
               scheduledAt={scheduledAt} setScheduledAt={setScheduledAt}
               onSend={handleWhatsAppSend}
               isPending={createMutation.isPending}
+              initialAccountId={locationState.accountId}
+              initialTemplateId={locationState.templateId}
             />
           )
         ) : (
