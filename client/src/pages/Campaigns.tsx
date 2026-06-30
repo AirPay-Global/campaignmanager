@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Plus, Play, Pause, BarChart2, Loader2, X, Megaphone, Mail, Send,
   CheckCircle2, Eye, MousePointerClick, AlertCircle, Copy, Bookmark, LayoutTemplate,
-  FlaskConical, Trophy, MessageCircle, RefreshCw,
+  FlaskConical, Trophy, MessageCircle, RefreshCw, Trash2,
 } from 'lucide-react';
 import api from '../lib/api';
 import { ToastContainer, useToast } from '../components/Toast';
@@ -676,6 +676,13 @@ export default function Campaigns() {
     onError: () => addToast('error', 'Failed to pause.'),
   });
 
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const deleteCampaignMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/campaigns/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['campaigns'] }); addToast('success', 'Campaign deleted.'); },
+    onError: () => addToast('error', 'Failed to delete campaign.'),
+  });
+
   const cloneMutation = useMutation({
     mutationFn: (id: string) => api.post(`/campaigns/${id}/clone`),
     onSuccess: () => {
@@ -861,6 +868,9 @@ export default function Campaigns() {
                           </button>
                           <button onClick={() => setAnalyticsId({ id: c.id, name: c.name })} title="View analytics" style={{ padding: '5px 8px', borderRadius: 7, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.3)', cursor: 'pointer' }}>
                             <BarChart2 size={13} />
+                          </button>
+                          <button onClick={() => setConfirmDeleteId(c.id)} title="Delete campaign" style={{ padding: '5px 8px', borderRadius: 7, background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', color: '#f87171', cursor: 'pointer' }}>
+                            <Trash2 size={12} />
                           </button>
                         </div>
                       </td>
@@ -1053,6 +1063,43 @@ export default function Campaigns() {
           onClose={() => setAbTestId(null)}
           onWinnerDeclared={() => setAbTestId(null)}
         />
+      )}
+
+      {/* Delete confirmation modal */}
+      {confirmDeleteId && (
+        <div className="modal-overlay">
+          <div className="glass animate-slide-up" style={{ width: 380, borderRadius: 16, padding: 28 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+              <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Trash2 size={16} color="#f87171" />
+              </div>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>Delete Campaign</div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>This action cannot be undone</div>
+              </div>
+            </div>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', lineHeight: 1.6, marginBottom: 20 }}>
+              The campaign and all its message queue entries will be permanently deleted. Sent messages are not affected.
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                className="btn-glass"
+                style={{ flex: 1, padding: '10px', borderRadius: 9, fontSize: 13, fontWeight: 600 }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { deleteCampaignMutation.mutate(confirmDeleteId); setConfirmDeleteId(null); }}
+                disabled={deleteCampaignMutation.isPending}
+                style={{ flex: 1, padding: '10px', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
+              >
+                {deleteCampaignMutation.isPending ? <Loader2 size={13} className="animate-spin-slow" /> : <Trash2 size={13} />}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
