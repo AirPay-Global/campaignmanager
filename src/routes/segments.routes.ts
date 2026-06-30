@@ -71,6 +71,9 @@ router.post(
       return;
     }
 
+    // Resolve count immediately so the UI shows accurate numbers
+    segmentService.resolveSegment(orgId, data.id).catch(() => {/* non-fatal */});
+
     res.status(201).json(data);
   }),
 );
@@ -141,6 +144,10 @@ router.patch(
       logger.error('Failed to update segment', { error: error.message });
       res.status(500).json({ error: 'Internal Server Error', message: error.message });
       return;
+    }
+
+    if ('filter_query' in updateData) {
+      segmentService.resolveSegment(orgId, id).catch(() => {/* non-fatal */});
     }
 
     res.json(data);
