@@ -87,7 +87,7 @@ app.use('/api/v1/contacts', contactRoutes);
 app.use('/api/v1/segments', segmentRoutes);
 app.use('/api/v1/messages', messageRoutes);
 app.use('/api/v1/ab-tests', abTestRoutes);
-app.use('/api/v1', abTestRoutes); // also handles /campaigns/:id/ab-test sub-route
+app.use('/api/v1/campaigns', abTestRoutes); // handles /campaigns/:campaignId/ab-test sub-route
 app.use('/api/v1/workflows', workflowRoutes);
 app.use('/api/v1/forms', formRoutes);
 app.use('/api/v1/ads', adsRoutes);
