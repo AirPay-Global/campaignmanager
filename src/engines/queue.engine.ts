@@ -4,6 +4,7 @@ import { sendWhatsAppTemplate, sendWhatsAppText, WhatsAppTemplateComponent } fro
 import { sendSMS } from '../adapters/sms.adapter';
 import { sendEmail } from '../adapters/email.adapter';
 import { callMetaTemplateApi, parseMetaError } from '../services/whatsapp-cloud.service';
+import { auditService } from '../services/audit.service';
 
 type ChannelType = 'whatsapp' | 'sms' | 'email' | 'push';
 type MessageStatus = 'pending' | 'queued' | 'sent' | 'delivered' | 'read' | 'failed' | 'bounced';
@@ -344,6 +345,10 @@ export async function processMessage(message: OutboundMessage): Promise<void> {
         .from('campaign_messages')
         .update({ status: 'sent', sent_at: new Date().toISOString(), external_id: externalId })
         .eq('id', message.campaign_message_id);
+
+      if (message.campaign_id) {
+        await maybeCompleteCampaign(message.campaign_id, message.org_id);
+      }
     }
 
     // Log delivery event
@@ -373,6 +378,10 @@ export async function processMessage(message: OutboundMessage): Promise<void> {
           .from('campaign_messages')
           .update({ status: 'failed', error_message: errorMessage })
           .eq('id', message.campaign_message_id);
+
+        if (message.campaign_id) {
+          await maybeCompleteCampaign(message.campaign_id, message.org_id);
+        }
       }
     } else {
       // Schedule retry with exponential backoff
@@ -389,6 +398,38 @@ export async function processMessage(message: OutboundMessage): Promise<void> {
         })
         .eq('id', message.id);
     }
+  }
+}
+
+async function maybeCompleteCampaign(campaignId: string, orgId: string): Promise<void> {
+  const { count, error } = await supabase
+    .from('campaign_messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('campaign_id', campaignId)
+    .in('status', ['pending', 'queued']);
+
+  if (error) {
+    logger.error('Failed to check campaign completion', { campaignId, error: error.message });
+    return;
+  }
+
+  if (count && count > 0) return;
+
+  const { data: updated, error: updateError } = await supabase
+    .from('campaigns')
+    .update({ status: 'completed', completed_at: new Date().toISOString() })
+    .eq('id', campaignId)
+    .eq('status', 'running')
+    .select('id');
+
+  if (updateError) {
+    logger.error('Failed to mark campaign completed', { campaignId, error: updateError.message });
+    return;
+  }
+
+  if (updated && updated.length > 0) {
+    logger.info('Campaign completed', { campaignId });
+    await auditService.log(orgId, null, 'campaign.completed', 'campaign', campaignId, {});
   }
 }
 
