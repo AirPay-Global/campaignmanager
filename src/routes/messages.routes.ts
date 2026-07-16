@@ -62,7 +62,7 @@ router.get(
 
     let query = supabase
       .from('inbound_messages')
-      .select('*', { count: 'exact' })
+      .select('*, campaign:campaigns(id, name)', { count: 'exact' })
       .eq('org_id', orgId)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);

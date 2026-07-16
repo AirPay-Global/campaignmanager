@@ -85,6 +85,22 @@ Open **Admin → WhatsApp → Message Log** to see:
 
 For raw webhook payloads, query the `webhook_logs` table directly in Supabase.
 
+## Reading Campaign Replies
+
+Replies from contacts land in the **Inbox** page (or `GET /messages/inbound`),
+stored in the `inbound_messages` table.
+
+When a contact replies directly to a message you sent, WhatsApp includes the
+original message's `wamid` in the reply's `context.id`. The webhook resolves
+this to the originating `outbound_message` and copies its `campaign_id` onto the
+inbound record (`context_message_id`, `outbound_message_id`, `campaign_id`). The
+Inbox shows a **Campaign** column so you can see which campaign each reply
+answers, and `GET /messages/inbound` embeds the campaign (`campaign: { id, name }`).
+
+Replies that aren't a threaded reply to a specific message (e.g. a contact
+starting a fresh message) have no `context.id` and therefore no campaign
+attribution — they still appear in the Inbox, just without a campaign.
+
 ---
 
 ## Error Reference
