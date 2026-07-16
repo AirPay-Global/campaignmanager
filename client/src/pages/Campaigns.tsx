@@ -23,8 +23,15 @@ interface SegmentsResponse { data: Segment[]; total?: number; }
 interface CampaignStats {
   campaignId: string; total: number; pending: number; queued: number;
   sent: number; delivered: number; read: number; failed: number; bounced: number;
-  opened: number; clicked: number;
-  deliveryRate: number; openRate: number; clickRate: number; failureRate: number;
+  opened: number; clicked: number; replies: number;
+  deliveryRate: number; openRate: number; clickRate: number; replyRate: number; failureRate: number;
+}
+interface CampaignReply {
+  id: string; channel: string; sender_id: string; body?: string; created_at: string;
+  contact?: { id: string; name?: string } | null;
+}
+interface CampaignRepliesResponse {
+  data: CampaignReply[]; total: number; totalPages: number;
 }
 interface FormState {
   name: string; description: string; channel: string; segment_id: string;
@@ -190,6 +197,11 @@ function AnalyticsModal({ campaignId, campaignName, onClose }: { campaignId: str
     queryKey: ['campaign-analytics', campaignId],
     queryFn: () => api.get(`/campaigns/${campaignId}/analytics`).then(r => r.data),
   });
+  const { data: replies } = useQuery<CampaignRepliesResponse>({
+    queryKey: ['campaign-replies', campaignId],
+    queryFn: () => api.get(`/campaigns/${campaignId}/replies`, { params: { limit: 10 } }).then(r => r.data),
+    enabled: (stats?.replies ?? 0) > 0,
+  });
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="glass animate-slide-up" style={{ width: '100%', maxWidth: 520 }} onClick={e => e.stopPropagation()}>
@@ -224,12 +236,14 @@ function AnalyticsModal({ campaignId, campaignName, onClose }: { campaignId: str
               <StatBar label="Delivered" value={stats.delivered + stats.read} max={stats.total} color="#4ade80" icon={CheckCircle2} />
               <StatBar label="Opened" value={stats.opened} max={stats.total} color="#818cf8" icon={Eye} />
               <StatBar label="Clicked" value={stats.clicked} max={stats.total} color="#38bdf8" icon={MousePointerClick} />
+              <StatBar label="Replied" value={stats.replies} max={stats.total} color="#25d366" icon={MessageCircle} />
               <StatBar label="Failed / Bounced" value={stats.failed + stats.bounced} max={stats.total} color="#f87171" icon={AlertCircle} />
               <div style={{ display: 'flex', gap: 10, marginTop: 20, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                 {[
                   { label: 'Delivery Rate', value: `${stats.deliveryRate}%`, color: '#4ade80' },
                   { label: 'Open Rate',     value: `${stats.openRate}%`,     color: '#818cf8' },
                   { label: 'Click Rate',    value: `${stats.clickRate}%`,    color: '#38bdf8' },
+                  { label: 'Reply Rate',    value: `${stats.replyRate}%`,    color: '#25d366' },
                 ].map(({ label, value, color }) => (
                   <div key={label} style={{ flex: 1, background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 8, padding: '10px', textAlign: 'center' }}>
                     <div style={{ fontSize: 18, fontWeight: 700, color, letterSpacing: '-0.03em' }}>{value}</div>
@@ -240,6 +254,36 @@ function AnalyticsModal({ campaignId, campaignName, onClose }: { campaignId: str
               {(stats.pending + stats.queued) > 0 && (
                 <div style={{ marginTop: 14, padding: '10px 14px', borderRadius: 8, background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)', fontSize: 12, color: '#fbbf24', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Send size={12} />{stats.pending + stats.queued} message{stats.pending + stats.queued !== 1 ? 's' : ''} still in queue
+                </div>
+              )}
+              {stats.replies > 0 && (
+                <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
+                    <MessageCircle size={13} color="#25d366" />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.8)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      Replies
+                    </span>
+                    <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)' }}>
+                      {replies ? `showing ${replies.data.length} of ${replies.total}` : `${stats.replies}`}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 220, overflowY: 'auto' }}>
+                    {(replies?.data ?? []).map(r => (
+                      <div key={r.id} style={{ background: 'rgba(37,211,102,0.04)', border: '1px solid rgba(37,211,102,0.1)', borderRadius: 8, padding: '9px 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 3 }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.75)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {r.contact?.name || r.sender_id}
+                          </span>
+                          <span style={{ flexShrink: 0, fontSize: 10, color: 'rgba(255,255,255,0.3)' }}>
+                            {new Date(r.created_at).toLocaleString()}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5 }}>
+                          {r.body || <span style={{ color: 'rgba(255,255,255,0.25)', fontStyle: 'italic' }}>no text content</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </>
