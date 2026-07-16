@@ -19,6 +19,7 @@ interface WhatsAppWebhookEntry {
         timestamp: string;
         text?: { body: string };
         type: string;
+        context?: { id?: string; from?: string };
         image?: { id: string; mime_type: string; sha256: string };
         document?: { id: string; mime_type: string; filename: string };
         audio?: { id: string; mime_type: string };
@@ -138,6 +139,10 @@ export async function handleWhatsAppWebhook(req: Request, res: Response): Promis
         const senderName = value.contacts?.find((c) => c.wa_id === senderWaId)?.profile?.name;
         const body = message.text?.body ?? '';
         const messageType = message.type;
+        // When a contact replies to a message we sent, WhatsApp includes the
+        // wamid of the original message in context.id. Resolve it to the
+        // outbound (campaign) message so replies are attributable.
+        const contextMessageId = message.context?.id;
 
         try {
           // Upsert contact
@@ -155,6 +160,24 @@ export async function handleWhatsAppWebhook(req: Request, res: Response): Promis
             .select('id')
             .single();
 
+          // Resolve the replied-to outbound message (and its campaign) if any
+          let repliedOutboundId: string | null = null;
+          let repliedCampaignId: string | null = null;
+          if (contextMessageId) {
+            const { data: repliedTo } = await supabase
+              .from('outbound_messages')
+              .select('id, campaign_id')
+              .or(`meta_message_id.eq.${contextMessageId},external_id.eq.${contextMessageId}`)
+              .eq('org_id', orgId)
+              .limit(1)
+              .single();
+
+            if (repliedTo) {
+              repliedOutboundId = repliedTo.id as string;
+              repliedCampaignId = (repliedTo.campaign_id as string | null) ?? null;
+            }
+          }
+
           // Store inbound message
           const { data: inbound, error: inboundError } = await supabase
             .from('inbound_messages')
@@ -165,6 +188,9 @@ export async function handleWhatsAppWebhook(req: Request, res: Response): Promis
               sender_id: senderWaId,
               body,
               external_id: message.id,
+              context_message_id: contextMessageId ?? null,
+              outbound_message_id: repliedOutboundId,
+              campaign_id: repliedCampaignId,
               raw_payload: message,
             })
             .select('id')
@@ -182,7 +208,12 @@ export async function handleWhatsAppWebhook(req: Request, res: Response): Promis
               orgId,
               sourceType: 'whatsapp_inbound',
               channel: 'whatsapp',
-              metadata: { message_id: message.id, type: messageType },
+              metadata: {
+                message_id: message.id,
+                type: messageType,
+                ...(repliedCampaignId ? { campaign_id: repliedCampaignId } : {}),
+                ...(contextMessageId ? { in_reply_to: contextMessageId } : {}),
+              },
             }).catch(() => {});
           }
 

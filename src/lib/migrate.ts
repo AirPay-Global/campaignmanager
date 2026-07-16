@@ -673,6 +673,19 @@ CREATE INDEX IF NOT EXISTS idx_imported_segments_org ON imported_segments(org_id
 ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS imported_segment_id UUID REFERENCES imported_segments(id) ON DELETE SET NULL;
 `;
 
+const SQL_016 = `
+-- Attribute inbound replies back to the outbound (campaign) message they answer.
+-- WhatsApp includes context.id (the wamid of the message being replied to) on
+-- replies; we resolve that to the originating outbound_message and campaign.
+ALTER TABLE inbound_messages ADD COLUMN IF NOT EXISTS context_message_id  TEXT;
+ALTER TABLE inbound_messages ADD COLUMN IF NOT EXISTS outbound_message_id UUID REFERENCES outbound_messages(id) ON DELETE SET NULL;
+ALTER TABLE inbound_messages ADD COLUMN IF NOT EXISTS campaign_id         UUID REFERENCES campaigns(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_inbound_messages_context_id  ON inbound_messages(context_message_id) WHERE context_message_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_inbound_messages_outbound_id ON inbound_messages(outbound_message_id) WHERE outbound_message_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_inbound_messages_campaign_id ON inbound_messages(org_id, campaign_id) WHERE campaign_id IS NOT NULL;
+`;
+
 const MIGRATIONS = [
   { name: '001_initial_schema',     sql: SQL_001 },
   { name: '002_rls_policies',       sql: SQL_002 },
@@ -689,6 +702,7 @@ const MIGRATIONS = [
   { name: '013_whatsapp_cloud',     sql: SQL_013 },
   { name: '014_whatsapp_accounts',  sql: SQL_014 },
   { name: '015_imported_segments',  sql: SQL_015 },
+  { name: '016_inbound_reply_attribution', sql: SQL_016 },
 ];
 
 export async function runMigrations(): Promise<void> {

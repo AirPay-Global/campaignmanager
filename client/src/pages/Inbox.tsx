@@ -11,6 +11,8 @@ interface InboundMessage {
   created_at: string;
   contact_id?: string;
   metadata?: Record<string, unknown>;
+  campaign_id?: string | null;
+  campaign?: { id: string; name: string } | null;
 }
 
 interface InboundResponse {
@@ -99,6 +101,7 @@ export default function InboxPage() {
                   <th>Channel</th>
                   <th>From</th>
                   <th>Message</th>
+                  <th>Campaign</th>
                   <th>Received</th>
                 </tr>
               </thead>
@@ -125,6 +128,20 @@ export default function InboxPage() {
                         <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'rgba(255,255,255,0.55)', fontSize: 13 }}>
                           {msg.body ?? <span style={{ color: 'rgba(255,255,255,0.2)', fontStyle: 'italic' }}>no content</span>}
                         </span>
+                      </td>
+                      <td style={{ maxWidth: 200 }}>
+                        {msg.campaign ? (
+                          <span style={{
+                            display: 'inline-block', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            fontSize: 11, fontWeight: 600, color: '#818cf8',
+                            background: 'rgba(99,102,241,0.12)', padding: '3px 9px',
+                            borderRadius: 6, border: '1px solid rgba(99,102,241,0.25)', verticalAlign: 'middle',
+                          }}>
+                            {msg.campaign.name}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'rgba(255,255,255,0.2)', fontSize: 13 }}>—</span>
+                        )}
                       </td>
                       <td style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', whiteSpace: 'nowrap' }}>
                         {new Date(msg.created_at).toLocaleString()}
