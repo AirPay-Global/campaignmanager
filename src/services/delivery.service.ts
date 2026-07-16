@@ -13,9 +13,11 @@ export interface CampaignStats {
   bounced: number;
   opened: number;
   clicked: number;
+  replies: number;
   deliveryRate: number;
   openRate: number;
   clickRate: number;
+  replyRate: number;
   failureRate: number;
 }
 
@@ -90,9 +92,17 @@ class DeliveryService {
       clicked = new Set((clickRows ?? []).map((r: { outbound_message_id: string }) => r.outbound_message_id)).size;
     }
 
+    // Count inbound replies attributed to this campaign
+    const { count: replyCount } = await supabase
+      .from('inbound_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('campaign_id', campaignId);
+    const replies = replyCount ?? 0;
+
     const deliveryRate = total > 0 ? (counts.delivered + counts.read) / total : 0;
     const openRate = total > 0 ? opened / total : 0;
     const clickRate = total > 0 ? clicked / total : 0;
+    const replyRate = total > 0 ? replies / total : 0;
     const failureRate = total > 0 ? (counts.failed + counts.bounced) / total : 0;
 
     return {
@@ -101,9 +111,11 @@ class DeliveryService {
       ...counts,
       opened,
       clicked,
+      replies,
       deliveryRate: Math.round(deliveryRate * 10000) / 100,
       openRate: Math.round(openRate * 10000) / 100,
       clickRate: Math.round(clickRate * 10000) / 100,
+      replyRate: Math.round(replyRate * 10000) / 100,
       failureRate: Math.round(failureRate * 10000) / 100,
     };
   }

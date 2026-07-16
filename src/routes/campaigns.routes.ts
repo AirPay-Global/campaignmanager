@@ -459,4 +459,49 @@ router.get(
   }),
 );
 
+// GET /campaigns/:id/replies — inbound replies attributed to this campaign
+router.get(
+  '/:id/replies',
+  asyncHandler(async (req, res) => {
+    const orgId = req.user!.org_id;
+    const { id } = req.params;
+    const page = Number(req.query['page'] ?? '1');
+    const limit = Math.min(Number(req.query['limit'] ?? '20'), 100);
+    const offset = (page - 1) * limit;
+
+    const { data: campaign } = await supabase
+      .from('campaigns')
+      .select('id')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .single();
+
+    if (!campaign) {
+      res.status(404).json({ error: 'Not Found', message: 'Campaign not found' });
+      return;
+    }
+
+    const { data, error, count } = await supabase
+      .from('inbound_messages')
+      .select('id, channel, sender_id, body, created_at, contact:contacts(id, name)', { count: 'exact' })
+      .eq('org_id', orgId)
+      .eq('campaign_id', id)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    if (error) {
+      res.status(500).json({ error: 'Internal Server Error', message: error.message });
+      return;
+    }
+
+    res.json({
+      data,
+      total: count ?? 0,
+      page,
+      limit,
+      totalPages: Math.ceil((count ?? 0) / limit),
+    });
+  }),
+);
+
 export default router;
