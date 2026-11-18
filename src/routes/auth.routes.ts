@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
 import { logger } from '../lib/logger';
 import { authMiddleware } from '../middleware/auth.middleware';
+import { passwordResetRateLimiter } from '../middleware/rate-limit.middleware';
+import { supabase } from '../lib/supabase';
 
 const router = Router();
 
@@ -70,6 +72,53 @@ router.post('/login', async (req: Request, res: Response) => {
     const error = err as Error;
     logger.error('Login error', { error: error.message });
     return res.status(500).json({ error: 'Authentication failed' });
+  }
+});
+
+// POST /api/v1/auth/forgot-password
+// Always returns the same response so account existence is not revealed.
+router.post('/forgot-password', passwordResetRateLimiter, async (req: Request, res: Response) => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
+  if (!email) return res.status(400).json({ error: 'email is required' });
+
+  const appUrl = (process.env.APP_URL ?? '').replace(/\/$/, '');
+  try {
+    const { error } = await getAnonClient().auth.resetPasswordForEmail(email, {
+      redirectTo: appUrl ? `${appUrl}/reset-password` : undefined,
+    });
+    if (error) logger.warn('Password reset request failed', { error: error.message });
+  } catch (err: unknown) {
+    logger.error('Forgot password error', { error: (err as Error).message });
+  }
+  return res.json({ message: 'If an account exists for that email, a reset link has been sent.' });
+});
+
+// POST /api/v1/auth/reset-password  { access_token, password }
+// access_token is the recovery token from the emailed link.
+router.post('/reset-password', passwordResetRateLimiter, async (req: Request, res: Response) => {
+  const { access_token, password } = req.body ?? {};
+  if (typeof access_token !== 'string' || !access_token || typeof password !== 'string') {
+    return res.status(400).json({ error: 'access_token and password are required' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+
+  try {
+    const { data, error } = await supabase.auth.getUser(access_token);
+    if (error || !data.user) {
+      return res.status(400).json({ error: 'Reset link is invalid or has expired' });
+    }
+    const { error: updateError } = await supabase.auth.admin.updateUserById(data.user.id, { password });
+    if (updateError) {
+      logger.warn('Password reset failed', { userId: data.user.id, error: updateError.message });
+      return res.status(400).json({ error: updateError.message });
+    }
+    logger.info('Password reset successful', { userId: data.user.id });
+    return res.json({ message: 'Password updated successfully' });
+  } catch (err: unknown) {
+    logger.error('Reset password error', { error: (err as Error).message });
+    return res.status(500).json({ error: 'Password reset failed' });
   }
 });
 

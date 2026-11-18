@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../lib/api';
 import { Loader2, Zap } from 'lucide-react';
 
@@ -91,6 +91,12 @@ export default function Login() {
                   <input type={type} value={value} onChange={e=>setter(e.target.value)} placeholder={ph} className="input-glass" />
                 </div>
               ))}
+
+              <div style={{ textAlign:'right', marginTop:-4 }}>
+                <Link to="/forgot-password" style={{ fontSize:12, color:'rgba(255,255,255,0.45)', textDecoration:'none' }}>
+                  Forgot password?
+                </Link>
+              </div>
 
               <button type="submit" disabled={loading} className="btn-chrome" style={{
                 width:'100%', padding:'13px', borderRadius:10,

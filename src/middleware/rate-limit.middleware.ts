@@ -37,3 +37,13 @@ export const publicFormRateLimiter = rateLimit({
   },
 });
 
+
+export const passwordResetRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many password reset attempts. Please try again later.',
+  },
+});
