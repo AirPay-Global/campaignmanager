@@ -26,6 +26,7 @@ import abTestRoutes from './routes/ab-tests.routes';
 import workflowRoutes from './routes/workflows.routes';
 import formRoutes from './routes/forms.routes';
 import publicRoutes from './routes/public.routes';
+import verifyRoutes from './routes/verify.routes';
 import adsRoutes from './routes/ads.routes';
 import socialRoutes from './routes/social.routes';
 import messageTemplateRoutes from './routes/message-templates.routes';
@@ -79,6 +80,7 @@ app.use('/api/v1/public', publicRoutes);
 // ─── API Routes ──────────────────────────────────────────────────────────────
 app.use('/api/v1', apiRateLimiter);
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/verify', verifyRoutes);
 app.use('/api/v1/setup', setupRoutes);
 app.use('/api/v1/migrate', migrateRoutes);
 app.use('/api/v1/campaigns', campaignRoutes);

@@ -686,6 +686,22 @@ CREATE INDEX IF NOT EXISTS idx_inbound_messages_outbound_id ON inbound_messages(
 CREATE INDEX IF NOT EXISTS idx_inbound_messages_campaign_id ON inbound_messages(org_id, campaign_id) WHERE campaign_id IS NOT NULL;
 `;
 
+const SQL_017 = `
+CREATE TABLE IF NOT EXISTS whatsapp_verifications (
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  org_id       UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  phone        TEXT NOT NULL,
+  code_hash    TEXT NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'verified', 'expired', 'failed')),
+  attempts     INT NOT NULL DEFAULT 0,
+  expires_at   TIMESTAMPTZ NOT NULL,
+  verified_at  TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_wa_verifications_phone ON whatsapp_verifications(org_id, phone, created_at DESC);
+ALTER TABLE whatsapp_verifications ENABLE ROW LEVEL SECURITY;
+`;
+
 const MIGRATIONS = [
   { name: '001_initial_schema',     sql: SQL_001 },
   { name: '002_rls_policies',       sql: SQL_002 },
@@ -703,6 +719,7 @@ const MIGRATIONS = [
   { name: '014_whatsapp_accounts',  sql: SQL_014 },
   { name: '015_imported_segments',  sql: SQL_015 },
   { name: '016_inbound_reply_attribution', sql: SQL_016 },
+  { name: '017_whatsapp_verifications', sql: SQL_017 },
 ];
 
 export async function runMigrations(): Promise<void> {

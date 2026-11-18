@@ -47,3 +47,11 @@ export const passwordResetRateLimiter = rateLimit({
     error: 'Too many password reset attempts. Please try again later.',
   },
 });
+
+export const verifyRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many verification requests. Please try again later.' },
+});
